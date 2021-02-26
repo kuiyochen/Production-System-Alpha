@@ -59,3 +59,20 @@ def pol2car(*arg, output_column_stack = True, input_radius_first = True, degree 
         Thetas = np.deg2rad(Thetas)
     return complex2real(Rs * np.exp(Thetas * 1J), output_stack = output_column_stack)
 
+# from reader import UA3P_reader
+# UA3P_xy, UA3P_z, UA3P_zd, _, _ = UA3P_reader("XX.csv", dim = 3)
+# def data_extended(point_xy, point_z, boundary = "auto"):
+
+def get_dyadic_cubic_partion_tree(*arg, dim = 3):
+    assert dim == 2, dim == 3
+    if dim == 3:
+        L = len(arg)
+        assert L > 0 and L <= 3
+        if L == 1:
+            points = arg[0].copy()
+        if else:
+            points = np.column_stack(list(arg)).copy()
+        assert points.shape[1] == 3, "wrong shape input"
+
+        1
+
