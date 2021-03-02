@@ -63,33 +63,22 @@ def pol2car(*arg, output_column_stack = True, input_radius_first = True, degree 
 # UA3P_xy, UA3P_z, UA3P_zd, _, _ = UA3P_reader("XX.csv", dim = 3)
 import scipy as sp
 from scipy.spatial import ConvexHull
-def data_extended(point_xy, point_z, extend_distance = 2., extended_mode = "normal to boundary", boundary = "auto"):
-    if boundary == "auto":
+def data_extended(point_xy, point_z, boundary = "auto", extended_mode = "normal to boundary", extend_distance = 2., extend_density = 1.):
+    if boundary == "auto" and extended_mode == "normal to boundary":
         center = np.mean(point_xy, axis = 0)
+        extend_density = extend_density if abs((360 % extend_density) - extend_density) < 0.01 else 360. / (int(360. / extend_density) + 1.)
+        unit_vectors = complex2real(np.exp(1J * np.deg2rad(np.arange(0., 360., extend_density))))
         hull = ConvexHull(point_xy)
         # hull.vertices
-        # hull.equations
+        ray_points_on_boundary = []
+        # for in hull.equations:
+        ray_equations = unit_vectors[:, [1, 0]]
+        ray_equations[:, 1] = ray_equations[:, 1] * -1.
+        ray_equations = np.column_stack([ray_equations, -np.dot(ray_equations, center[..., None]).reshape(-1)])
+        # ray_points_on_ex_boundary = ray_points_on_boundary + unit_vectors * extend_distance
 
-# def get_dyadic_cubic_partion_tree(*arg, dim = 3):
-#     assert dim == 2, dim == 3
-#     if dim == 3:
-#         L = len(arg)
-#         assert L > 0 and L <= 3
-#         if L == 1:
-#             points = arg[0].copy()
-#         if else:
-#             points = np.column_stack(list(arg)).copy()
-#         assert points.shape[1] == 3, "wrong shape input"
-
-#         # class tree():
-#         #     def __init__(self, parent = None):
-#         #         super(node, self).__init__()
-#         #         self.arg = arg
-#         #         self.children = [None for i in range(8)]
-#         #         self.parent = parent
-#         1
-
-def nbd_detecter(pts, detect_pts, detect_R, dim = 2, maximal_possible_detect_R = 0.3):
+def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
+    maximal_possible_detect_R = 0.3, partition_pitch = 0.1, partition_xy = None):
     if dim == 2:
         import time
         start_time = time.time()
@@ -102,19 +91,13 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, maximal_possible_detect_R =
         # maximal_possible_detect_R = 0.3
         # detect_R = 0.2
 
-        partition_pitch = 0.1
-        partition_x = []
+        # partition_pitch = 0.1
         detect_min_x = np.min(detect_pts[:, 0])
         detect_total_distance_x = (np.max(detect_pts[:, 0]) - detect_min_x)
         min_x = np.min(pts[:, 0])
         total_distance_x = (np.max(pts[:, 0]) - min_x)
         total_partition_x = int(total_distance_x / partition_pitch) if total_distance_x > partition_pitch else 1
         partition_pitch_x = total_distance_x / total_partition_x
-        temp = np.arange(len(pts))
-        for i in range(total_partition_x):
-            TF = pts[temp, 0] <= partition_pitch_x * (i + 1) + min_x
-            partition_x.append(temp[TF])
-            temp = temp[~TF]
         number_of_min_side_extended_x = int(max(min_x - detect_min_x, 0) // partition_pitch_x + \
                                             maximal_possible_detect_R // partition_pitch_x + 10)
         number_of_max_side_extended_x = int(max((detect_min_x + detect_total_distance_x) - \
@@ -122,12 +105,7 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, maximal_possible_detect_R =
                                             maximal_possible_detect_R // partition_pitch_x + 10)
         # number_of_min_side_extended_x = 0
         # number_of_max_side_extended_x = 0
-        partition_x = [np.empty(0)] * number_of_min_side_extended_x + \
-                                            partition_x + \
-                                            [np.empty(0)] * number_of_max_side_extended_x
 
-
-        # partition_y = []
         detect_min_y = np.min(detect_pts[:, 0])
         detect_total_distance_y = (np.max(detect_pts[:, 0]) - detect_min_y)
         min_y = np.min(pts[:, 1])
@@ -140,40 +118,52 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, maximal_possible_detect_R =
                                             (min_y + total_distance_y), 0) // partition_pitch_y + \
                                             maximal_possible_detect_R // partition_pitch_y + 10)
         # number_of_min_side_extended_y = 0
-        number_of_max_side_extended_y = 0
-        partition_xy = np.array([[0] * (total_partition_y + \
-                                            number_of_min_side_extended_y + \
-                                            number_of_max_side_extended_y)
-                                ] * (total_partition_x + \
-                                            number_of_min_side_extended_x + \
-                                            number_of_max_side_extended_x), dtype = object)
-        for i in range(number_of_min_side_extended_x, number_of_min_side_extended_x + total_partition_x):
-            temp = partition_x[i].copy()
-            for j in range(number_of_min_side_extended_y, number_of_min_side_extended_y + total_partition_y):
-                TF = pts[temp, 1] <= partition_pitch_y * (j + 1 - number_of_min_side_extended_y) + min_y
-                # partition_y.append(temp[TF])
-                partition_xy[i, j] = temp[TF].copy()
-                # print(j, pts[temp, 1])
+        # number_of_max_side_extended_y = 0
+
+        if partition_xy is None:
+            partition_x = []
+            temp = np.arange(len(pts))
+            for i in range(total_partition_x):
+                TF = pts[temp, 0] <= partition_pitch_x * (i + 1) + min_x
+                partition_x.append(temp[TF])
                 temp = temp[~TF]
-                # print(temp)
-                # print(i, j, partition_xy[i, j])
-                # if j > 2:
-                    # break
-            # break
-        for i in range(number_of_min_side_extended_x):
-            for j in range(number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
-                partition_xy[i, j] = np.empty(0)
-        for i in range(number_of_min_side_extended_x + total_partition_x, \
-                    number_of_min_side_extended_x + total_partition_x + number_of_max_side_extended_x):
-            for j in range(number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
-                partition_xy[i, j] = np.empty(0)
-        for i in range(number_of_min_side_extended_x, number_of_min_side_extended_x + total_partition_x):
-            for j in range(number_of_min_side_extended_y):
-                partition_xy[i, j] = np.empty(0)
-        for i in range(number_of_min_side_extended_x, number_of_min_side_extended_x + total_partition_x):
-            for j in range(number_of_min_side_extended_y + total_partition_y, \
-                            number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
-                partition_xy[i, j] = np.empty(0)
+            partition_x = [np.empty(0)] * number_of_min_side_extended_x + \
+                                                partition_x + \
+                                                [np.empty(0)] * number_of_max_side_extended_x
+
+            partition_xy = np.array([[0] * (total_partition_y + \
+                                                number_of_min_side_extended_y + \
+                                                number_of_max_side_extended_y)
+                                    ] * (total_partition_x + \
+                                                number_of_min_side_extended_x + \
+                                                number_of_max_side_extended_x), dtype = object)
+            for i in range(number_of_min_side_extended_x, number_of_min_side_extended_x + total_partition_x):
+                temp = partition_x[i].copy()
+                for j in range(number_of_min_side_extended_y, number_of_min_side_extended_y + total_partition_y):
+                    TF = pts[temp, 1] <= partition_pitch_y * (j + 1 - number_of_min_side_extended_y) + min_y
+                    # partition_y.append(temp[TF])
+                    partition_xy[i, j] = temp[TF].copy()
+                    # print(j, pts[temp, 1])
+                    temp = temp[~TF]
+                    # print(temp)
+                    # print(i, j, partition_xy[i, j])
+                    # if j > 2:
+                        # break
+                # break
+            for i in range(number_of_min_side_extended_x):
+                for j in range(number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
+                    partition_xy[i, j] = np.empty(0)
+            for i in range(number_of_min_side_extended_x + total_partition_x, \
+                        number_of_min_side_extended_x + total_partition_x + number_of_max_side_extended_x):
+                for j in range(number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
+                    partition_xy[i, j] = np.empty(0)
+            for i in range(number_of_min_side_extended_x, number_of_min_side_extended_x + total_partition_x):
+                for j in range(number_of_min_side_extended_y):
+                    partition_xy[i, j] = np.empty(0)
+            for i in range(number_of_min_side_extended_x, number_of_min_side_extended_x + total_partition_x):
+                for j in range(number_of_min_side_extended_y + total_partition_y, \
+                                number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
+                    partition_xy[i, j] = np.empty(0)
 
         temp = (int(2 * detect_R / partition_pitch) + 1)
         nbd_partition_id = (temp + 1) // 2 if temp % 2 else temp // 2
@@ -208,4 +198,5 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, maximal_possible_detect_R =
             # print(time.time() - s_time)
 
         print("\nALL:", time.time() - start_time)
+        return nbd_of_detect_pts_ids, partition_xy, partition_pitch
 
