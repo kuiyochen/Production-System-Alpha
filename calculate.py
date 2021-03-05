@@ -10,29 +10,33 @@ def complex2real(arg, output_stack = True):
     return np.column_stack([A[0], A[1]])
 
 def real2complex(*arg):
-    if len(arg) == 1:
-        assert type(arg[0]) == np.ndarray
-        arg = arg[0]
+    if type(arg) != np.ndarray and len(arg) == 2:
+        A = [arg[0].copy(), arg[1].copy()]
+    else:
+        if type(arg) != np.ndarray:
+            assert len(arg) == 1
+            arg = arg[0]
         S = arg.shape
         assert S[-1] == 2
         A = [arg[..., 0].copy(), arg[..., 1].copy()]
-    else:
-        assert len(arg) == 2
-        A = [arg[0].copy(), arg[1].copy()]
     return A[0] + A[1] * 1J
 
 def car2pol(*arg, output_column_stack = True, output_radius_first = True, degree = "deg"):
-    if len(arg) == 1:
-        assert type(arg[0]) == np.ndarray
-        arg = arg[0]
+    if type(arg) != np.ndarray and len(arg) == 2:
+        C = real2complex(arg[0], arg[1])
+    else:
+        if type(arg) != np.ndarray:
+            assert len(arg) == 1
+            arg = arg[0]
         S = arg.shape
         assert len(S) == 2
         assert S[1] == 2
-        C = real2complex(arg[0])
-    else:
-        assert len(arg) == 2
-        C = real2complex(arg[0], arg[1])
+        C = real2complex(arg)
     P = [np.abs(C), np.angle(C, deg = (degree == "deg"))]
+    if degree == "deg":
+        P[1] = P[1] % 360
+    else:
+        P[1] = P[1] % (np.pi * 2)
     if not output_radius_first:
         P[0], P[1] = P[1], P[0]
     if not output_column_stack:
@@ -40,17 +44,17 @@ def car2pol(*arg, output_column_stack = True, output_radius_first = True, degree
     return np.column_stack([P[0], P[1]])
 
 def pol2car(*arg, output_column_stack = True, input_radius_first = True, degree = "deg"): # degree = deg or rad
-    if len(arg) == 1:
-        assert type(arg[0]) == np.ndarray
-        arg = arg[0]
+    if type(arg) != np.ndarray and len(arg) == 2:
+        arg = [arg[0], arg[1]]
+    else:
+        if type(arg) != np.ndarray:
+            assert len(arg) == 1
+            arg = arg[0]
         S = arg.shape
         assert len(S) == 2
         assert S[1] == 2
         arg = arg.copy()
         arg = [arg[:, 0], arg[:, 1]]
-    else:
-        assert len(arg) == 2
-        arg = [arg[0], arg[1]]
     if not input_radius_first:
         arg[0], arg[1] = arg[1], arg[0]
     Rs = arg[0].copy()
@@ -63,48 +67,62 @@ def pol2car(*arg, output_column_stack = True, input_radius_first = True, degree 
 # UA3P_xy, UA3P_z, UA3P_zd, _, _ = UA3P_reader("XX.csv", dim = 3)
 import scipy as sp
 from scipy.spatial import ConvexHull
-def data_extended(point_xy, point_z, detect_R
+def data_extended(point_xy, point_z, detect_R, 
     boundary = "auto", extended_mode = "normal to boundary", 
     extend_distance = 2., extend_density = 1.):
     if boundary == "auto" and extended_mode == "normal to boundary":
         center = np.mean(point_xy, axis = 0)
         extend_density = extend_density if abs((360 % extend_density) - extend_density) < 0.01 else 360. / (int(360. / extend_density) + 1.)
-        unit_vectors_rad = np.deg2rad(np.arange(0., 360., extend_density))
+        unit_vectors_rad = np.deg2rad(np.arange(0., 360., 10))
+        # unit_vectors_rad = np.deg2rad(np.arange(0., 360., extend_density))
         unit_vectors = complex2real(np.exp(1J * unit_vectors_rad))
-        hull = ConvexHull(point_xy)
-        # hull.vertices
-        # hull.equations
-        ray_equations = unit_vectors[:, [1, 0]]
+        hull = ConvexHull(point_xy) # hull.equations
+        ray_equations = unit_vectors[:, [1, 0]].copy()
         ray_equations[:, 1] = ray_equations[:, 1] * -1.
         ray_equations = np.column_stack([ray_equations, np.dot(ray_equations, center[..., None]).reshape(-1)])
+        print("ray_equations: ", ray_equations)
 
-        hull_vertices_rad = car2pol(point_xy[hull.vertices, :], degree = "deg")[:, 1]
+        hull_vertices = point_xy[hull.vertices, :].copy()
+        _, hull_vertices_rad = car2pol(hull_vertices - center, output_column_stack = False, degree = "rad")
 
         ray_points_on_boundary = np.zeros_like(unit_vectors)
-        k = -1
+        k = np.argmin(hull_vertices_rad) - len(hull_vertices_rad)
         start_rad = hull_vertices_rad[k]
         end_rad = hull_vertices_rad[k + 1]
-        if start_rad > end_rad:
-            end_rad = end_rad + np.pi * 2
-        temp_eq = hull.vertices[k + 1] - hull.vertices[k]
+        # if start_rad > end_rad:
+        #     end_rad = end_rad + np.pi * 2
+        temp_eq = hull_vertices[k + 1] - hull_vertices[k]
+        temp_eq[0], temp_eq[1] = temp_eq[1], -temp_eq[0]
         temp_eq = temp_eq / np.linalg.norm(temp_eq)
-        temp_eq = np.append(temp_eq, np.dot(temp_eq, hull.vertices[k]))
-        for i in range(len(unit_vectors_rad)):
+        temp_eq = np.append(temp_eq, np.dot(temp_eq, hull_vertices[k]))
+        unit_vectors_rad[unit_vectors_rad <= start_rad] += np.pi * 2
+        print("unit_vectors_rad: ", unit_vectors_rad)
+        print("hull_vertices_rad: ", hull_vertices_rad)
+        i = np.argmin(unit_vectors_rad) - len(unit_vectors_rad)
+        print(temp_eq)
+        for _ in range(len(unit_vectors_rad)):
             ray_points_on_boundary[i] = np.linalg.solve(\
-                                np.array([ray_equations[i, :2], temp_eq[i, :2]]), \
-                                np,array([ray_equations[i, -1], temp_eq[i, -1]]))
-            temp = unit_vectors_rad[i]
-            if temp < np.pi:
-                temp = temp + np.pi * 2
-            if temp > end_rad:
+                                np.array([ray_equations[i, :2], temp_eq[:2]]), \
+                                np.array([ray_equations[i, -1], temp_eq[-1]]))
+            # assert np.abs(np.dot(ray_equations[i, :2], unit_vectors[i] + center) - ray_equations[i, 2]) < 10**-5
+            # assert np.abs(np.dot(ray_equations[i, :2], center) - ray_equations[i, 2]) < 10**-5
+            # assert np.abs(np.dot(temp_eq[:2], hull_vertices[k]) - temp_eq[2]) < 10**-5
+            # assert np.abs(np.dot(temp_eq[:2], hull_vertices[k + 1]) - temp_eq[2]) < 10**-5
+            if unit_vectors_rad[i] > end_rad:
                 k += 1
+                print("k", k, unit_vectors_rad[i] % (np.pi * 2), "i", i, len(unit_vectors_rad))
+                print(unit_vectors_rad[i], end_rad)
                 start_rad = hull_vertices_rad[k]
                 end_rad = hull_vertices_rad[k + 1]
                 if start_rad > end_rad:
                     end_rad = end_rad + np.pi * 2
-                temp_eq = hull.vertices[k + 1] - hull.vertices[k]
+                temp_eq = hull_vertices[k + 1] - hull_vertices[k]
+                temp_eq[0], temp_eq[1] = temp_eq[1], -temp_eq[0]
                 temp_eq = temp_eq / np.linalg.norm(temp_eq)
-                temp_eq = np.append(temp_eq, np.dot(temp_eq, hull.vertices[k]))
+                temp_eq = np.append(temp_eq, np.dot(temp_eq, hull_vertices[k]))
+                print(temp_eq)
+            i += 1
+        return ray_points_on_boundary
 
         nbd_of_detect_pts_ids, partition_xy, partition_pitch = nbd_detecter(point_xy, ray_points_on_boundary, detect_R, dim = 2, \
                 maximal_possible_detect_R = 0.3, partition_pitch = 0.1, partition_xy = None)
@@ -113,6 +131,7 @@ def data_extended(point_xy, point_z, detect_R
             temp_xy = point_xy[nbd_of_detect_pts_ids[i], :].copy()
             temp_xy = np.column_stack([temp_xy, np.ones(len(temp_xy))])
             temp_z = point_z[nbd_of_detect_pts_ids[i]]
+            print("temp_xy: ", temp_xy)
             n_ = np.dot(np.linalg.inv(np.dot(temp_xy.T, temp_xy)), \
                     np.dot(temp_xy.T, temp_z[..., None])).reshape(-1)
             planes.append(n_)
@@ -157,8 +176,8 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
         number_of_max_side_extended_x = int(max((detect_min_x + detect_total_distance_x) - \
                                             (min_x + total_distance_x), 0) // partition_pitch_x + \
                                             maximal_possible_detect_R // partition_pitch_x + 10)
-        # number_of_min_side_extended_x = 0
-        # number_of_max_side_extended_x = 0
+        number_of_min_side_extended_x = 0
+        number_of_max_side_extended_x = 0
 
         detect_min_y = np.min(detect_pts[:, 0])
         detect_total_distance_y = (np.max(detect_pts[:, 0]) - detect_min_y)
@@ -171,8 +190,8 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
         number_of_max_side_extended_y = int(max((detect_min_y + detect_total_distance_y) - \
                                             (min_y + total_distance_y), 0) // partition_pitch_y + \
                                             maximal_possible_detect_R // partition_pitch_y + 10)
-        # number_of_min_side_extended_y = 0
-        # number_of_max_side_extended_y = 0
+        number_of_min_side_extended_y = 0
+        number_of_max_side_extended_y = 0
 
         if partition_xy is None:
             partition_x = []
@@ -241,7 +260,12 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
                                                            total_partition_y)]
 
             # s_time = time.time()
-            temp_xy = np.concatenate(list(temp_xy.reshape(-1))).astype(int)
+            # print("temp_xy in nbd: ", temp_xy)
+            temp_xy = list(temp_xy.reshape(-1))
+            if len(temp_xy) > 0:
+                temp_xy = np.concatenate(temp_xy).astype(int)
+            else:
+                temp_xy = np.empty(0)
             nbd_of_detect_pts_ids.append(temp_xy)
             if len(nbd_of_detect_pts_ids[-1]):
                 temp_ = pts[nbd_of_detect_pts_ids[-1], :] - detect_pts[i]
