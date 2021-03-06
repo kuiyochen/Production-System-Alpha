@@ -113,8 +113,8 @@ def data_extended(point_xy, point_z, detect_R,
                                 np.array([ray_equations[i, -1], temp_eq[-1]]))
             i += 1
 
-        nbd_of_detect_pts_ids, partition_xy, partition_pitch = nbd_detecter(point_xy, ray_points_on_boundary, detect_R, dim = 2, \
-                maximal_possible_detect_R = 0.3, partition_pitch = 0.1, partition_xy = None)
+        nbd_of_detect_pts_ids, partition_data = nbd_detecter(point_xy, ray_points_on_boundary, detect_R, dim = 2, \
+                partition_pitch = 0.1, partition_data = None)
         planes = []
         for i in range(len(nbd_of_detect_pts_ids)):
             temp_xy = point_xy[nbd_of_detect_pts_ids[i], :].copy()
@@ -144,88 +144,74 @@ def data_extended(point_xy, point_z, detect_R,
             ex_point_z.append(temp_z)
         ex_point_xy = np.row_stack(ex_point_xy)
         ex_point_z = np.concatenate(ex_point_z)
-        return ex_point_xy, ex_point_z, partition_xy, partition_pitch
+        return ex_point_xy, ex_point_z, partition_data
 
 def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
-    maximal_possible_detect_R = 0.3, partition_pitch = 0.1, partition_xy = None):
+    partition_pitch = 0.1, partition_data = None):
     if dim == 2:
         import time
         start_time = time.time()
 
-        # pts = (np.random.rand(10**6 * 2, 2) * 2 - 1)
+        # pts = (np.random.rand(10**4 * 2, 2) * 2 - 1)
         # detect_pts = (np.random.rand((2 * 100)**2, 2) * 2 - 1) * 1.2
+        # # maximal_possible_detect_R = 0.3
+        # detect_R = 0.2
+        # partition_pitch = 0.1
+        # partition_data = None
+
         pp = np.linspace(0, 100.1, len(detect_pts)).astype(int)
         filter_pp = np.diff(np.append(pp, 100)) > 0
         filter_pp[-1] = True
-        # maximal_possible_detect_R = 0.3
-        # detect_R = 0.2
 
-        # partition_pitch = 0.1
         detect_min_x = np.min(detect_pts[:, 0])
         detect_total_distance_x = (np.max(detect_pts[:, 0]) - detect_min_x)
-        min_x = np.min(pts[:, 0])
-        total_distance_x = (np.max(pts[:, 0]) - min_x)
-        total_partition_x = int(total_distance_x / partition_pitch) if total_distance_x > partition_pitch else 1
-        partition_pitch_x = total_distance_x / total_partition_x
-        number_of_min_side_extended_x = int(max(min_x - detect_min_x, 0) // partition_pitch_x + \
-                                            maximal_possible_detect_R // partition_pitch_x + 10)
-        number_of_max_side_extended_x = int(max((detect_min_x + detect_total_distance_x) - \
-                                            (min_x + total_distance_x), 0) // partition_pitch_x + \
-                                            maximal_possible_detect_R // partition_pitch_x + 10)
-        number_of_min_side_extended_x = 0
-        number_of_max_side_extended_x = 0
-
         detect_min_y = np.min(detect_pts[:, 0])
         detect_total_distance_y = (np.max(detect_pts[:, 0]) - detect_min_y)
-        min_y = np.min(pts[:, 1])
-        total_distance_y = (np.max(pts[:, 1]) - min_y)
-        total_partition_y = int(total_distance_y / partition_pitch) if total_distance_y > partition_pitch else 1
-        partition_pitch_y = total_distance_y / total_partition_y
-        number_of_min_side_extended_y = int(max(min_y - detect_min_y, 0) // partition_pitch_y + \
-                                            maximal_possible_detect_R // partition_pitch_y + 10)
-        number_of_max_side_extended_y = int(max((detect_min_y + detect_total_distance_y) - \
-                                            (min_y + total_distance_y), 0) // partition_pitch_y + \
-                                            maximal_possible_detect_R // partition_pitch_y + 10)
-        number_of_min_side_extended_y = 0
-        number_of_max_side_extended_y = 0
 
-        if partition_xy is None:
+        if partition_data is None:
+            min_x = np.min(pts[:, 0])
+            total_distance_x = (np.max(pts[:, 0]) - min_x)
+            total_partition_x = int(total_distance_x / partition_pitch) if total_distance_x > partition_pitch else 1
+            partition_pitch_x = total_distance_x / total_partition_x
+            min_y = np.min(pts[:, 1])
+            total_distance_y = (np.max(pts[:, 1]) - min_y)
+            total_partition_y = int(total_distance_y / partition_pitch) if total_distance_y > partition_pitch else 1
+            partition_pitch_y = total_distance_y / total_partition_y
             partition_x = []
             temp = np.arange(len(pts))
             for i in range(total_partition_x):
                 TF = pts[temp, 0] <= partition_pitch_x * (i + 1) + min_x
                 partition_x.append(temp[TF])
                 temp = temp[~TF]
-            partition_x = [np.empty(0)] * number_of_min_side_extended_x + \
-                                                partition_x + \
-                                                [np.empty(0)] * number_of_max_side_extended_x
-
-            partition_xy = np.array([[0] * (total_partition_y + \
-                                                number_of_min_side_extended_y + \
-                                                number_of_max_side_extended_y)
-                                    ] * (total_partition_x + \
-                                                number_of_min_side_extended_x + \
-                                                number_of_max_side_extended_x), dtype = object)
-            for i in range(number_of_min_side_extended_x, number_of_min_side_extended_x + total_partition_x):
+            partition_xy = np.array([[0] * total_partition_y] * total_partition_x, dtype = object)
+            for i in range(total_partition_x):
                 temp = partition_x[i].copy()
-                for j in range(number_of_min_side_extended_y, number_of_min_side_extended_y + total_partition_y):
-                    TF = pts[temp, 1] <= partition_pitch_y * (j + 1 - number_of_min_side_extended_y) + min_y
+                for j in range(total_partition_y):
+                    TF = pts[temp, 1] <= partition_pitch_y * (j + 1) + min_y
                     partition_xy[i, j] = temp[TF].copy()
                     temp = temp[~TF]
-            for i in range(number_of_min_side_extended_x):
-                for j in range(number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
-                    partition_xy[i, j] = np.empty(0)
-            for i in range(number_of_min_side_extended_x + total_partition_x, \
-                        number_of_min_side_extended_x + total_partition_x + number_of_max_side_extended_x):
-                for j in range(number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
-                    partition_xy[i, j] = np.empty(0)
-            for i in range(number_of_min_side_extended_x, number_of_min_side_extended_x + total_partition_x):
-                for j in range(number_of_min_side_extended_y):
-                    partition_xy[i, j] = np.empty(0)
-            for i in range(number_of_min_side_extended_x, number_of_min_side_extended_x + total_partition_x):
-                for j in range(number_of_min_side_extended_y + total_partition_y, \
-                                number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
-                    partition_xy[i, j] = np.empty(0)
+            partition_data = {"partition_xy": partition_xy, 
+                          "partition_pitch": partition_pitch, 
+                          "min_x": min_x, 
+                          "total_distance_x": total_distance_x, 
+                          "total_partition_x": total_partition_x, 
+                          "partition_pitch_x": partition_pitch_x, 
+                          "min_y": min_y, 
+                          "total_distance_y": total_distance_y, 
+                          "total_partition_y": total_partition_y, 
+                          "partition_pitch_y": partition_pitch_y, 
+                         }
+        else:
+            partition_xy = partition_data["partition_xy"].copy()
+            partition_pitch = partition_data["partition_pitch"]
+            min_x = partition_data["min_x"]
+            total_distance_x = partition_data["total_distance_x"]
+            total_partition_x = partition_data["total_partition_x"]
+            partition_pitch_x = partition_data["partition_pitch_x"]
+            min_y = partition_data["min_y"]
+            total_distance_y = partition_data["total_distance_y"]
+            total_partition_y = partition_data["total_partition_y"]
+            partition_pitch_y = partition_data["partition_pitch_y"]
 
         temp = (int(2 * detect_R / partition_pitch) + 1)
         nbd_partition_id = (temp + 1) // 2 if temp % 2 else temp // 2
@@ -234,21 +220,15 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
         for i in range(len(detect_pts)):
             if filter_pp[i]:
                 print(pp[i], end = "\r")
-            partition_id_x = int((detect_pts[i, 0] - min_x) / partition_pitch_x) + number_of_min_side_extended_x
-            partition_id_y = int((detect_pts[i, 1] - min_y) / partition_pitch_y) + number_of_min_side_extended_y
-            # print("\t detect_pts:", detect_pts[i])
-            # print(pts[partition_x[partition_id_x]])
+            partition_id_x = int((detect_pts[i, 0] - min_x) / partition_pitch_x)
+            partition_id_y = int((detect_pts[i, 1] - min_y) / partition_pitch_y)
 
-            temp_xy = partition_xy[max(partition_id_x - nbd_partition_id, 0):min(partition_id_x + nbd_partition_id + 1, \
-                                                           number_of_min_side_extended_x + \
-                                                           number_of_max_side_extended_x + \
-                                                           total_partition_x), 
-                                    max(partition_id_y - nbd_partition_id, 0):min(partition_id_y + nbd_partition_id + 1, \
-                                                           number_of_min_side_extended_y + \
-                                                           number_of_max_side_extended_y + \
-                                                           total_partition_y)]
+            temp_xy = partition_xy[max(partition_id_x - nbd_partition_id, 0):\
+                                   min(partition_id_x + nbd_partition_id + 1, total_partition_x), 
+                                    max(partition_id_y - nbd_partition_id, 0):\
+                                   min(partition_id_y + nbd_partition_id + 1, total_partition_y)]
 
-            s_time = time.time()
+            # s_time = time.time()
             # print("temp_xy in nbd: ", temp_xy)
             temp_xy = list(temp_xy.reshape(-1))
             if len(temp_xy) > 0:
@@ -262,8 +242,10 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
 
             # temp = pts - detect_pts[i]
             # temp = pts[np.linalg.norm(temp, axis = 1) < detect_R, :]
-            print("nbd time: ", time.time() - s_time)
+            # print("nbd time: ", time.time() - s_time)
 
         print("\nALL:", time.time() - start_time)
-        return nbd_of_detect_pts_ids, partition_xy, partition_pitch
+        return nbd_of_detect_pts_ids, partition_data
+
+
 
