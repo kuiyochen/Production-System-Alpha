@@ -207,9 +207,41 @@ GL_objs = []
 # GL_objs.append(Point(np.zeros((1, 3)), 2))
 GL_objs.append(Point(np.column_stack([np.arange(0, 10, 1.5), 
                         np.arange(0, 10, 1.5),
-                        np.arange(0, 10, 1.5)]), 5))
-GL_objs.append(Line(np.array([[10.0, 10.0, 20], 
-                [0.0, 0.0, 20]]), 2))
+                        np.arange(0, 10, 1.5)])-5, 5))
+# GL_objs.append(Line(np.array([[10.0, 10.0, 20], 
+#                 [10.0, 0.0, -10], [30, 30, 30], [40, 40, 40]]), 2))
+plot_grid = True
+if plot_grid:
+    temp = np.arange(-50, 50 + 1., 25)
+    temp_ = np.column_stack([temp, np.full_like(temp, 50), np.zeros_like(temp)])
+    temp__ = temp_.copy()
+    temp__[:, 1] = -temp__[:, 1]
+    temp_ = np.transpose(np.concatenate([temp_[..., None], temp__[..., None]], axis = -1), (0, 2, 1))
+    GL_objs.append(Line(temp_.reshape(-1, 3), 1))
+
+    temp_ = np.column_stack([np.full_like(temp, 50), temp, np.zeros_like(temp)])
+    temp__ = temp_.copy()
+    temp__[:, 0] = -temp__[:, 0]
+    temp_ = np.transpose(np.concatenate([temp_[..., None], temp__[..., None]], axis = -1), (0, 2, 1))
+    GL_objs.append(Line(temp_.reshape(-1, 3), 1))
+
+    temp = np.array([10., 10, 20])
+    temp_ = np.tile(temp, (4, 1))
+    temp_[1:3, 1] = -temp_[1:3, 1]
+    temp_[2:4, 0] = -temp_[2:4, 0]
+    temp__ = np.zeros((4, 2, 3))
+    temp__[:, 0, :] = temp_.copy()
+    temp__[:-1, 1, :] = temp_[1:].copy()
+    temp__[-1, 1, :] = temp.copy()
+    temp__ = temp__.reshape(-1, 3)
+    temp_ = temp__.copy()
+    temp__[:, 2] = -temp__[:, 2]
+    temp_ = np.row_stack([temp_, temp__])
+    GL_objs.append(Line(temp_.copy(), 1))
+    
+    GL_objs.append(Line(np.array([[0, 0, 0.], [100, 0, 0], \
+                                [0, 0, 0.], [0, 100, 0], \
+                                [0, 0, 0.], [0, 0, 100]]), 1))
 
 x = np.arange(-30, 50, 1)
 y = np.arange(-10, 100, 1)
