@@ -120,18 +120,25 @@ def data_extended(point_xy, point_z, detect_R,
             temp_xy = point_xy[nbd_of_detect_pts_ids[i], :].copy()
             temp_xy = np.column_stack([temp_xy, np.ones(len(temp_xy))])
             temp_z = point_z[nbd_of_detect_pts_ids[i]]
-            # print("temp_xy: ", temp_xy)
-            n_ = np.dot(np.linalg.inv(np.dot(temp_xy.T, temp_xy)), \
-                    np.dot(temp_xy.T, temp_z[..., None])).reshape(-1)
+            try:
+                n_ = np.dot(np.linalg.inv(np.dot(temp_xy.T, temp_xy)), \
+                        np.dot(temp_xy.T, temp_z[..., None])).reshape(-1)
+            except Exception as e:
+                if "singular" in str(e).lower():
+                    raise TypeError("Singular Matrix!\n"\
+                         + " detect_R so small that there's no enough data for prediction.\n"\
+                         + f"number of data: {len(temp_xy)}")
+                else:
+                    raise e
             planes.append(n_)
         planes = np.array(planes)
 
         ex_point_xy = []
         ex_point_z = []
+        temp_norms = np.linspace(0, extend_distance, 1 + int(15 * extend_density))[..., None]
         for i in range(len(ray_points_on_boundary)):
-            temp_xy = np.linspace(0, extend_distance, 1 + int(15 * extend_density))
-            temp_xy = np.tile(unit_vectors[i], (len(temp_xy), 1)) * temp_xy[..., None]
-            temp_xy = temp_xy + ray_points_on_boundary[i]
+            temp_xy = np.tile(unit_vectors[i], (len(temp_norms), 1)) * temp_norms \
+                             + ray_points_on_boundary[i]
             temp_z = np.dot(planes[i].reshape(1, 3), np.row_stack([temp_xy.T, np.ones(len(temp_xy))])).reshape(-1)
             ex_point_xy.append(temp_xy)
             ex_point_z.append(temp_z)
@@ -203,15 +210,8 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
                 temp = partition_x[i].copy()
                 for j in range(number_of_min_side_extended_y, number_of_min_side_extended_y + total_partition_y):
                     TF = pts[temp, 1] <= partition_pitch_y * (j + 1 - number_of_min_side_extended_y) + min_y
-                    # partition_y.append(temp[TF])
                     partition_xy[i, j] = temp[TF].copy()
-                    # print(j, pts[temp, 1])
                     temp = temp[~TF]
-                    # print(temp)
-                    # print(i, j, partition_xy[i, j])
-                    # if j > 2:
-                        # break
-                # break
             for i in range(number_of_min_side_extended_x):
                 for j in range(number_of_min_side_extended_y + total_partition_y + number_of_max_side_extended_y):
                     partition_xy[i, j] = np.empty(0)
@@ -248,7 +248,7 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
                                                            number_of_max_side_extended_y + \
                                                            total_partition_y)]
 
-            # s_time = time.time()
+            s_time = time.time()
             # print("temp_xy in nbd: ", temp_xy)
             temp_xy = list(temp_xy.reshape(-1))
             if len(temp_xy) > 0:
@@ -262,7 +262,7 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
 
             # temp = pts - detect_pts[i]
             # temp = pts[np.linalg.norm(temp, axis = 1) < detect_R, :]
-            # print(time.time() - s_time)
+            print("nbd time: ", time.time() - s_time)
 
         print("\nALL:", time.time() - start_time)
         return nbd_of_detect_pts_ids, partition_xy, partition_pitch
