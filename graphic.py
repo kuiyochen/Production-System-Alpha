@@ -170,15 +170,17 @@ class Point():
             ('v3f', self.points),
             ('c3f', self.data_points_color))
 
-width = 600
-height = 600
+width = 1000
+height = 800
 
+# config = pyglet.gl.Config(sample_buffers=1, samples=4)
+# window = pyglet.window.Window(width=width, height=height, config=config, caption='GL_Plot', resizable=True)
 window = pyglet.window.Window(width=width, height=height, caption='GL_Plot', resizable=True)
 cursor = window.get_system_mouse_cursor(window.CURSOR_CROSSHAIR)
 window.set_mouse_cursor(cursor)
 
 # backgroundcolor
-glClearColor(0.1, 0.1, 0.1, 1)
+glClearColor(0.95, 0.95, 0.95, 1)
 
 glEnable(GL_DEPTH_TEST)
 # glDisable(GL_DEPTH_TEST)
@@ -190,11 +192,11 @@ gluPerspective(45., 1., 0.1, 800.)
 glMatrixMode(GL_MODELVIEW)
 
 glEnable(GL_LINE_SMOOTH)
-# glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
+glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
 glEnable(GL_POINT_SMOOTH)
-# glHint(GL_POINT_SMOOTH_HINT, GL_NICEST)
+glHint(GL_POINT_SMOOTH_HINT, GL_NICEST)
 glEnable(GL_POLYGON_SMOOTH)
-# glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST)
+glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST)
 
 glEnable(GL_BLEND)
 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -212,7 +214,7 @@ GL_objs.append(Point(np.column_stack([np.arange(0, 10, 1.5),
 #                 [10.0, 0.0, -10], [30, 30, 30], [40, 40, 40]]), 2))
 plot_grid = True
 if plot_grid:
-    temp = np.arange(-50, 50 + 1., 25)
+    temp = np.arange(-50, 50 + 1., 20)
     temp_ = np.column_stack([temp, np.full_like(temp, 50), np.zeros_like(temp)])
     temp__ = temp_.copy()
     temp__[:, 1] = -temp__[:, 1]
@@ -238,10 +240,10 @@ if plot_grid:
     temp__[:, 2] = -temp__[:, 2]
     temp_ = np.row_stack([temp_, temp__])
     GL_objs.append(Line(temp_.copy(), 1))
-    
+
     GL_objs.append(Line(np.array([[0, 0, 0.], [100, 0, 0], \
                                 [0, 0, 0.], [0, 100, 0], \
-                                [0, 0, 0.], [0, 0, 100]]), 1))
+                                [0, 0, 0.], [0, 0, 20]]), 3))
 
 x = np.arange(-30, 50, 1)
 y = np.arange(-10, 100, 1)
@@ -354,4 +356,3 @@ def on_key_press(symbol, modifiers):
         camera.__init__()
 
 pyglet.app.run()
-
