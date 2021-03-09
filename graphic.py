@@ -32,6 +32,7 @@ class GL_camera():
     def mouse_MIDDLE(self, dx, dy):
         self.rz += dx / 5.0
         self.rx -= dy / 5.0
+
 camera_init_setting = {"x": 0, "y":0, "z":-150, "rx":-62, "ry":0, "rz":26}
 camera = GL_camera(camera_init_setting)
 
@@ -363,6 +364,18 @@ def on_key_press(symbol, modifiers):
     key = pyglet.window.key
     if symbol == key.R:
         camera.__init__(camera_init_setting)
+    if symbol == key.F8:
+        rx = camera.rx
+        rz = camera.rz
+        closest_rx = round(rx / 90) * 90
+        closest_rz = round(rz / 90) * 90
+        for t in np.arange(0., 1., 0.1):
+            camera.rx = closest_rx * t + rx * (1 - t)
+            camera.rz = closest_rz * t + rz * (1 - t)
+            on_draw()
+            window.flip()
+        camera.rx = closest_rx
+        camera.rz = closest_rz
     if symbol == key.Q:
         print(camera.rx, camera.ry, camera.rz)
         print(camera.x, camera.y, camera.z)
