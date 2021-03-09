@@ -8,10 +8,18 @@ from pyglet.gl import *
 
 
 class GL_camera():
-    def __init__(self):
-        self.x = self.y = 0
-        self.z = -10
-        self.rx = self.ry = self.rz = 0
+    def __init__(self, setting = None):
+        if setting:
+            self.x = setting["x"]
+            self.y = setting["y"]
+            self.z = setting["z"]
+            self.rx = setting["rx"]
+            self.ry = setting["ry"]
+            self.rz = setting["rz"]
+        else:
+            self.x = self.y = 0
+            self.z = -10
+            self.rx = self.ry = self.rz = 0
     def on_mouse_scroll(self, scroll_x, scroll_y): # zoom
         with np.errstate(divide = 'ignore', over = 'ignore'):
             self.z = min(-0.5, self.z + scroll_y * 10)
@@ -24,7 +32,8 @@ class GL_camera():
     def mouse_MIDDLE(self, dx, dy):
         self.rz += dx / 5.0
         self.rx -= dy / 5.0
-camera = GL_camera()
+camera_init_setting = {"x": 0, "y":0, "z":-150, "rx":-62, "ry":0, "rz":26}
+camera = GL_camera(camera_init_setting)
 
 class Surface():
     def __init__(self, mx, my, mz, color):
@@ -154,7 +163,7 @@ class Point():
             return np.column_stack([np.ones_like(h)] * 3)
         h = (h - np.min(h)) / (np.max(h) - np.min(h))
         h = h * 0.8 + 0.2
-        return np.array(list(map(lambda x: hsv_to_rgb(x, 1., 1.), h)))
+        return np.array(list(map(lambda x: hsv_to_rgb(x, 1., 1.), h))) * 0.75
 
     def draw(self):
         glLoadIdentity()
@@ -353,6 +362,9 @@ def on_mouse_drag(x, y, dx, dy, button, modifiers):
 def on_key_press(symbol, modifiers):
     key = pyglet.window.key
     if symbol == key.R:
-        camera.__init__()
+        camera.__init__(camera_init_setting)
+    if symbol == key.Q:
+        print(camera.rx, camera.ry, camera.rz)
+        print(camera.x, camera.y, camera.z)
 
 pyglet.app.run()
