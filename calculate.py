@@ -581,5 +581,35 @@ def gcode_writer(ncp_name, gcode_axis_name, arrays):
 #             F_mitigate_rate = 0.8
 #             )
 
+def interpolation_2D(x, y, interpolation_data = {"x_start_end_pitch": (-1., 1., 1.), 
+    "y_start_end_pitch": (-1., 1., 1.), 
+    "grid_shape": (3, 3), 
+    "grid_x": np.array([[-1., 0., 1.], [-1., 0., 1.], [-1., 0., 1.]]), 
+    "grid_y": np.array([[-1., -1., -1.], [0., 0., 0.], [1., 1., 1.]]), 
+    "grid_z": np.zeros((3, 3)).astype(np.float64)}):
+    x_start, x_end, x_pitch = interpolation_data["x_start_end_pitch"]
+    y_start, y_end, y_pitch = interpolation_data["y_start_end_pitch"]
+    grid_shape = interpolation_data["grid_shape"]
+    grid_x = interpolation_data["grid_x"]
+    grid_y = interpolation_data["grid_y"]
+    grid_z = interpolation_data["grid_z"].copy()
+    grid_z = np.column_stack([np.zeros(len(grid_z)), grid_z, np.zeros(len(grid_z))])
+    grid_z = np.row_stack([np.zeros(grid_z.shape[1]), grid_z, np.zeros(grid_z.shape[1])])
 
+    id_x, res_x = divmod((x - x_start), x_pitch)
+    id_y, res_y = divmod((y - y_start), y_pitch)
+    res_x = res_x / x_pitch
+    res_y = res_y / y_pitch
+    temp_id_x = id_x.copy()
+    temp_id_y = id_y.copy()
+    temp_id_x = np.clip(temp_id_x + 1, 0, grid_shape[0]).astype(int)
+    temp_id_y = np.clip(temp_id_y + 1, 0, grid_shape[1]).astype(int)
+    temp_x0 = grid_z[temp_id_x, temp_id_y] * (1 - res_y) + grid_z[temp_id_x, temp_id_y + 1] * res_y
+    temp_x1 = grid_z[temp_id_x + 1, temp_id_y] * (1 - res_y) + grid_z[temp_id_x + 1, temp_id_y + 1] * res_y
+    z = temp_x0 * (1 - res_x) + temp_x1 * res_x
+    z[id_x < -1] = 0.
+    z[id_x >= grid_shape[0]] = 0.
+    z[id_y < -1] = 0.
+    z[id_y >= grid_shape[1]] = 0.
+    return z
 
