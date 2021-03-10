@@ -590,8 +590,8 @@ def interpolation_2D(x, y, interpolation_data = {"x_start_end_pitch": (-1., 1., 
     x_start, x_end, x_pitch = interpolation_data["x_start_end_pitch"]
     y_start, y_end, y_pitch = interpolation_data["y_start_end_pitch"]
     grid_shape = interpolation_data["grid_shape"]
-    grid_x = interpolation_data["grid_x"]
-    grid_y = interpolation_data["grid_y"]
+    # grid_x = interpolation_data["grid_x"]
+    # grid_y = interpolation_data["grid_y"]
     grid_z = interpolation_data["grid_z"].copy()
     grid_z = np.column_stack([np.zeros(len(grid_z)), grid_z, np.zeros(len(grid_z))])
     grid_z = np.row_stack([np.zeros(grid_z.shape[1]), grid_z, np.zeros(grid_z.shape[1])])
@@ -612,4 +612,58 @@ def interpolation_2D(x, y, interpolation_data = {"x_start_end_pitch": (-1., 1., 
     z[id_y < -1] = 0.
     z[id_y >= grid_shape[1]] = 0.
     return z
+
+def smooth_calculator(pts, z, smoothness_R, grid_pitch, partition_data = None):
+    import time
+    start_time = time.time()
+    x_pitch = grid_pitch
+    y_pitch = grid_pitch
+    x_start = np.min(pts[:, 0]) - x_pitch
+    x_end = np.max(pts[:, 0]) + x_pitch
+    x_end = (x_end // x_pitch + 1) * x_pitch
+    y_start = np.min(pts[:, 1]) - y_pitch
+    y_end = np.max(pts[:, 1]) + y_pitch
+    y_end = (y_end // y_pitch + 1) * y_pitch
+    x = np.arange(x_start, x_end + 10**-10, x_pitch)
+    y = np.arange(y_start, y_end + 10**-10, y_pitch)
+    mx, my = np.meshgrid(x, y, indexing='ij')
+    interpolation_data = {"x_start_end_pitch": (x_start, x_end, x_pitch), 
+        "y_start_end_pitch": (y_start, y_end, y_pitch), 
+        "grid_shape": mx.shape, 
+        "grid_x": mx, 
+        "grid_y": my, 
+        "grid_z": np.zeros_like(mx)}
+    calculate_pts = np.column_stack([mx.reshape(-1), my.reshape(-1)])
+
+    if partition_data is None:
+        nbd_of_detect_pts_ids, partition_data = nbd_detecter(pts, calculate_pts, smoothness_R, partition_pitch = smoothness_R * 1.1)
+    else:
+        nbd_of_detect_pts_ids, _ = nbd_detecter(pts, calculate_pts, smoothness_R, partition_data = partition_data)
+
+    def kernal(t):
+        t = t.copy()
+        t = t / smoothness_R
+        t = np.clip(t, 0., 1. - 10**-10)
+        temp = 1 - t
+        temp2 = temp**2
+        temp3 = temp2 * temp
+        temp = 3 * temp2 - 2 * temp3
+        return temp / np.sum(temp)
+    pp = np.linspace(0, 100.1, len(calculate_pts)).astype(int)
+    filter_pp = np.diff(np.append(pp, 100)) > 0
+    filter_pp[-1] = True
+    temp_z = []
+    for i in range(len(calculate_pts)):
+        if filter_pp[i]:
+            print(pp[i], end = "\r")
+        if len(nbd_of_detect_pts_ids[i]) == 0:
+            temp_z.append(0.)
+            continue
+        temp_norms = np.linalg.norm(pts[nbd_of_detect_pts_ids[i], :] - calculate_pts[i], axis = 1)
+        weights = kernal(temp_norms)
+        temp_z.append(np.dot(z[nbd_of_detect_pts_ids[i]], weights))
+    interpolation_data["grid_z"] = np.array(temp_z).reshape(*mx.shape)
+    print("\nsmooth_calculator time:", time.time() - start_time)
+    return interpolation_data
+
 

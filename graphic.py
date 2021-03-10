@@ -239,7 +239,7 @@ if plot_grid:
     temp_ = np.transpose(np.concatenate([temp_[..., None], temp__[..., None]], axis = -1), (0, 2, 1))
     GL_objs.append(Line(temp_.reshape(-1, 3), 1))
 
-    temp = np.array([10., 10, 20])
+    temp = np.array([10., 10., 10.])
     temp_ = np.tile(temp, (4, 1))
     temp_[1:3, 1] = -temp_[1:3, 1]
     temp_[2:4, 0] = -temp_[2:4, 0]
@@ -365,6 +365,22 @@ def on_mouse_drag(x, y, dx, dy, button, modifiers):
 def on_key_press(symbol, modifiers):
     key = pyglet.window.key
     if symbol == key.R:
+        x = camera.x
+        y = camera.y
+        z = camera.z
+        rx = camera.rx
+        ry = camera.ry
+        rz = camera.rz
+        for t in np.arange(0., 1., 0.1):
+            t = 3 * t**2 - 2 * t**3
+            camera.x = camera_init_setting["x"] * t + x * (1 - t)
+            camera.y = camera_init_setting["y"] * t + y * (1 - t)
+            camera.z = camera_init_setting["z"] * t + z * (1 - t)
+            camera.rx = camera_init_setting["rx"] * t + rx * (1 - t)
+            camera.ry = camera_init_setting["ry"] * t + ry * (1 - t)
+            camera.rz = camera_init_setting["rz"] * t + rz * (1 - t)
+            on_draw()
+            window.flip()
         camera.__init__(camera_init_setting)
     if symbol == key.F8:
         rx = camera.rx
@@ -372,6 +388,7 @@ def on_key_press(symbol, modifiers):
         closest_rx = round(rx / 90) * 90
         closest_rz = round(rz / 90) * 90
         for t in np.arange(0., 1., 0.1):
+            t = 3 * t**2 - 2 * t**3
             camera.rx = closest_rx * t + rx * (1 - t)
             camera.rz = closest_rz * t + rz * (1 - t)
             on_draw()
