@@ -217,13 +217,33 @@ glDisable(GL_CULL_FACE)
 
 
 GL_objs = []
+GL_objs.append(Point(np.zeros((1, 3)), 3))
 
-# GL_objs.append(Point(np.zeros((1, 3)), 2))
-GL_objs.append(Point(np.column_stack([np.arange(0, 10, 1.5), 
-                        np.arange(0, 10, 1.5),
-                        np.arange(0, 10, 1.5)])-5, 5))
-# GL_objs.append(Line(np.array([[10.0, 10.0, 20], 
-#                 [10.0, 0.0, -10], [30, 30, 30], [40, 40, 40]]), 2))
+from calculate import *
+x = np.arange(-100., 100. + 10**-10, 1.3)
+y = np.arange(-100., 100. + 10**-10, 1.3)
+mx, my = np.meshgrid(x, y, indexing='ij')
+# mz = (mx**2 +my**2) / (5 * 10**2) + 10
+mz = np.cos(2 * np.pi * mx/70) * np.cos(2 * np.pi * my/88) * 10 + np.random.randn(*mx.shape)*2
+# mz = (mx**2 + my**2 - 20 * mx - 40 * my) / (3*10**2)
+# mz = (mx**2 + my**2 - 20 * mx - 40 * my) / (5 * 10**2) + np.random.randn(*mx.shape)*2
+point_xy = np.column_stack([mx.reshape(-1), my.reshape(-1)])
+point_z = mz.reshape(-1)
+interpolation_data = smooth_calculator(point_xy, \
+    mz.reshape(-1), smoothness_R = 10., grid_pitch = 5.)
+GL_objs.append(Point(np.column_stack([point_xy, mz.reshape(-1)]), 3))
+# interpolation_data = {"x_start_end_pitch": (-100., 100., 10.), 
+#     "y_start_end_pitch": (-100., 100., 10.), 
+#     "grid_shape": mx.shape, 
+#     "grid_x": mx, 
+#     "grid_y": my, 
+#     "grid_z": mz}
+# x = np.arange(30, 110. + 10**-10, 1.3)+20
+# y = np.arange(30, 110. + 10**-10, 1.3)+20
+# mx1, my1 = np.meshgrid(x, y, indexing='ij')
+# mz1 = interpolation_2D(mx1, my1, interpolation_data)
+# GL_objs.append(Point(np.column_stack([mx1.reshape(-1), my1.reshape(-1), mz1.reshape(-1)]), 5))
+
 plot_grid = True
 if plot_grid:
     temp = np.arange(-50, 50 + 1., 20)
@@ -257,19 +277,9 @@ if plot_grid:
                                 [0, 0, 0.], [0, 100, 0], \
                                 [0, 0, 0.], [0, 0, 20]]), 3))
 
-x = np.arange(-30, 50, 1)
-y = np.arange(-10, 100, 1)
-mx, my = np.meshgrid(x, y, indexing='ij')
-# mz = (mx**2 +my**2) / (5 * 10**2) + 10
-mz = (mx**2 + my**2 - 20 * mx - 40 * my) / (5 * 10**2)
-GL_objs.append(Surface(mx, my, mz, 'b'))
-
-x = np.arange(-60, 60, 1)
-y = np.arange(-60, 60, 1)
-mx1, my1 = np.meshgrid(x, y, indexing='ij')
-# mz1 = ((mx1 + 30)**2 + my1**2) / (10**3) + 15
-mz1 = np.zeros_like(mx1)
-GL_objs.append(Surface(mx1, my1, mz1, 'g'))
+# GL_objs.append(Surface(mx, my, mz, 'b'))
+GL_objs.append(Surface(interpolation_data["grid_x"], interpolation_data["grid_y"], \
+    interpolation_data["grid_z"], 'b'))
 
 @window.event
 def on_resize(width, height):
@@ -284,6 +294,12 @@ def on_resize(width, height):
 
     return pyglet.event.EVENT_HANDLED
 
+mv_mat = (GLdouble * 16)()
+p_mat  = (GLdouble * 16)()
+v_rect = (GLint * 4)()
+mouse_detect = True
+_, partition_data = nbd_detecter(point_xy, np.zeros((1, 2)), detect_R = 1, \
+        partition_pitch = 5, partition_data = None)
 @window.event
 def on_draw():
 
@@ -293,23 +309,42 @@ def on_draw():
     # wire-frame mode
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
-    # glColor3f(0.5, 0.5, 0.5)
+    glGetDoublev(GL_MODELVIEW_MATRIX, mv_mat)
+    glGetDoublev(GL_PROJECTION_MATRIX, p_mat)
+    glGetIntegerv(GL_VIEWPORT, v_rect)
 
-    # glBegin(GL_POINTS)
-    # glBegin(GL_LINES)
-    # glColor4fv((GLfloat * 4)(1, 0, 0, 1))
-    # glVertex3f(10.0, 10.0, 20)
-    # glVertex3f(0.0, 0.0, 20)
-    # glEnd()
-    # lines.draw()
+    if mouse_detect:
+        temp_val = [GLdouble() for _ in range(3)]
+        gluUnProject(*mouse_pos, 0, mv_mat, p_mat, v_rect, *temp_val)
+        mouse_near = np.array([v.value for v in temp_val])
+        gluUnProject(*mouse_pos, 1, mv_mat, p_mat, v_rect, *temp_val)
+        mouse_far = np.array([v.value for v in temp_val])
+        t = mouse_near[2] / (mouse_near[2] - mouse_far[2])
+        if t >= 0.:
+            point_on_plane = mouse_far * t + mouse_near * (1 - t)
+            # print("point_on_plane:", point_on_plane)
+            # print("ray:", mouse_far - mouse_near)
+            # print("mouse_pos:", mouse_pos)
+            nbd, _ = nbd_detecter(point_xy, point_on_plane[:2].reshape(1, 2), \
+                detect_R = max(abs(camera.z) * 0.1, 3), partition_data = partition_data)
+            nbd = nbd[0]
+        if t >= 0. and len(nbd):
+            nbd_xy = point_xy[nbd, :].copy()
+            nbd_z = point_z[nbd].copy()
+            GL_objs[0] = Point(np.column_stack([nbd_xy, nbd_z]), 10)
+        else:
+            GL_objs[0] = Point(np.zeros((1, 3)), 1)
 
     for obj in GL_objs:
         obj.draw()
 
     glFlush()
 
-# @window.event
-# def on_mouse_motion(x, y, dx, dy):
+mouse_pos = (0, 0)
+@window.event
+def on_mouse_motion(x, y, dx, dy):
+    global mouse_pos
+    mouse_pos = (x, y)
 #     # window.clear()
 #     # print(x, y)
 #     print("-------------")
@@ -341,10 +376,14 @@ def on_draw():
 
 @window.event
 def on_mouse_scroll(x, y, scroll_x, scroll_y): # zoom
+    global mouse_pos
+    mouse_pos = (x, y)
     camera.on_mouse_scroll(scroll_x, scroll_y)
 
 @window.event
 def on_mouse_drag(x, y, dx, dy, button, modifiers):
+    global mouse_pos
+    mouse_pos = (x, y)
     key = pyglet.window.key
     # if button == pyglet.window.mouse.MIDDLE and (modifiers & key.MOD_CTRL):
     #     x -= window.width // 2
