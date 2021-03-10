@@ -5,7 +5,9 @@ from colorsys import hsv_to_rgb
 
 import pyglet
 from pyglet.gl import *
-
+import ctypes
+user32 = ctypes.windll.user32
+screensize = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
 
 class GL_camera():
     def __init__(self, setting = None):
@@ -33,7 +35,7 @@ class GL_camera():
         self.rz += dx / 5.0
         self.rx -= dy / 5.0
 
-camera_init_setting = {"x": 0, "y":0, "z":-150, "rx":-62, "ry":0, "rz":26}
+camera_init_setting = {"x": 0, "y":0, "z":-150, "rx":-69.4, "ry":0, "rz":24.6}
 camera = GL_camera(camera_init_setting)
 
 class Surface():
@@ -180,15 +182,15 @@ class Point():
             ('v3f', self.points),
             ('c3f', self.data_points_color))
 
-width = 1000
-height = 800
+width = int(screensize[0] * 0.8)
+height = int(screensize[1] * 0.8)
 
 # config = pyglet.gl.Config(sample_buffers=1, samples=4)
 # window = pyglet.window.Window(width=width, height=height, config=config, caption='GL_Plot', resizable=True)
 window = pyglet.window.Window(width=width, height=height, caption='GL_Plot', resizable=True)
+window.set_location((screensize[0] - window.width) // 2, (screensize[1] - window.height) // 2)
 cursor = window.get_system_mouse_cursor(window.CURSOR_CROSSHAIR)
 window.set_mouse_cursor(cursor)
-
 # backgroundcolor
 glClearColor(0.95, 0.95, 0.95, 1)
 
