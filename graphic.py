@@ -6,10 +6,221 @@ from colorsys import hsv_to_rgb
 import pyglet
 from pyglet.gl import *
 import ctypes
-user32 = ctypes.windll.user32
-screensize = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+from calculate import *
 
-class GL_camera():
+
+class Window(pyglet.window.Window):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.camera_init_setting = {"x": 0, "y":0, "z":-150, "rx":-69.4, "ry":0, "rz":24.6}
+        self.camera = GL_camera(self.camera_init_setting)
+
+        self.mouse_pos = (0, 0)
+        self.mv_mat = (GLdouble * 16)()
+        self.p_mat  = (GLdouble * 16)()
+        self.v_rect = (GLint * 4)()
+
+
+        # config = pyglet.gl.Config(sample_buffers=1, samples=4)
+        # window = pyglet.window.Window(width=width, height=height, config=config, caption='GL_Plot', resizable=True)
+        # window = pyglet.window.Window(width=width, height=height, caption='GL_Plot', resizable=True)
+        self.set_location((screensize[0] - self.width) // 2, (screensize[1] - self.height) // 2)
+        cursor = self.get_system_mouse_cursor(self.CURSOR_CROSSHAIR)
+        self.set_mouse_cursor(cursor)
+        # backgroundcolor
+        glClearColor(0.95, 0.95, 0.95, 1)
+
+        glEnable(GL_DEPTH_TEST)
+        # glDisable(GL_DEPTH_TEST)
+        # glDepthFunc(GL_NEVER)
+        glShadeModel(GL_SMOOTH)
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        gluPerspective(45., 1., 0.1, 800.)
+        glMatrixMode(GL_MODELVIEW)
+
+        glEnable(GL_LINE_SMOOTH)
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
+        glEnable(GL_POINT_SMOOTH)
+        glHint(GL_POINT_SMOOTH_HINT, GL_NICEST)
+        glEnable(GL_POLYGON_SMOOTH)
+        glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST)
+
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        # glEnable(GL_CULL_FACE)
+        glDisable(GL_CULL_FACE)
+
+        self.GL_objs = []
+        self.GL_objs.append(Point(self, np.zeros((1, 3)), 3))
+
+        x = np.arange(-100., 100. + 10**-10, 1.3)
+        y = np.arange(-100., 100. + 10**-10, 1.3)
+        mx, my = np.meshgrid(x, y, indexing='ij')
+        # mz = (mx**2 +my**2) / (5 * 10**2) + 10
+        mz = np.cos(2 * np.pi * mx/70) * np.cos(2 * np.pi * my/88) * 10 + np.random.randn(*mx.shape)*2
+        # mz = (mx**2 + my**2 - 20 * mx - 40 * my) / (3*10**2)
+        # mz = (mx**2 + my**2 - 20 * mx - 40 * my) / (5 * 10**2) + np.random.randn(*mx.shape)*2
+        self.point_xy = np.column_stack([mx.reshape(-1), my.reshape(-1)])
+        self.point_z = mz.reshape(-1)
+        interpolation_data = smooth_calculator(self.point_xy, \
+            mz.reshape(-1), smoothness_R = 10., grid_pitch = 5.)
+        self.GL_objs.append(Point(self, np.column_stack([self.point_xy, mz.reshape(-1)]), 3))
+
+        self.plot_grid()
+
+        self.GL_objs.append(Surface(self, interpolation_data["grid_x"], interpolation_data["grid_y"], \
+            interpolation_data["grid_z"], 'b'))
+
+        _, self.partition_data = nbd_detecter(self.point_xy, np.zeros((1, 2)), detect_R = 1, \
+        partition_pitch = 5, partition_data = None)
+
+    def plot_grid(self, grid_width = 20, number_of_grid_in_axis = 5, axis_length = 100, z_grid_height = 10.):
+        grid_ = grid_width * number_of_grid_in_axis // 2
+        temp = np.arange(-grid_, grid_ + 10**-1, grid_width)
+        temp_ = np.column_stack([temp, np.full_like(temp, grid_), np.zeros_like(temp)])
+        temp__ = temp_.copy()
+        temp__[:, 1] = -temp__[:, 1]
+        temp_ = np.transpose(np.concatenate([temp_[..., None], temp__[..., None]], axis = -1), (0, 2, 1))
+        self.GL_objs.append(Line(self, temp_.reshape(-1, 3), 1))
+
+        temp_ = np.column_stack([np.full_like(temp, grid_), temp, np.zeros_like(temp)])
+        temp__ = temp_.copy()
+        temp__[:, 0] = -temp__[:, 0]
+        temp_ = np.transpose(np.concatenate([temp_[..., None], temp__[..., None]], axis = -1), (0, 2, 1))
+        self.GL_objs.append(Line(self, temp_.reshape(-1, 3), 1))
+
+        temp = np.array([10., 10., z_grid_height])
+        temp_ = np.tile(temp, (4, 1))
+        temp_[1:3, 1] = -temp_[1:3, 1]
+        temp_[2:4, 0] = -temp_[2:4, 0]
+        temp__ = np.zeros((4, 2, 3))
+        temp__[:, 0, :] = temp_.copy()
+        temp__[:-1, 1, :] = temp_[1:].copy()
+        temp__[-1, 1, :] = temp.copy()
+        temp__ = temp__.reshape(-1, 3)
+        temp_ = temp__.copy()
+        temp__[:, 2] = -temp__[:, 2]
+        temp_ = np.row_stack([temp_, temp__])
+        self.GL_objs.append(Line(self, temp_.copy(), 1))
+
+        self.GL_objs.append(Line(self, np.array([[0, 0, 0.], [axis_length, 0, 0], \
+                                    [0, 0, 0.], [0, axis_length, 0], \
+                                    [0, 0, 0.], [0, 0, z_grid_height * 2]]), 3))
+
+
+    def on_resize(self, width, height):
+        glViewport(0, 0, width, height)
+
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        gluPerspective(45., width / height, 0.1, 800.)
+
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+
+        return pyglet.event.EVENT_HANDLED
+
+    def mouse_detect(self):
+        glGetDoublev(GL_MODELVIEW_MATRIX, self.mv_mat)
+        glGetDoublev(GL_PROJECTION_MATRIX, self.p_mat)
+        glGetIntegerv(GL_VIEWPORT, self.v_rect)
+
+        temp_val = [GLdouble() for _ in range(3)]
+        gluUnProject(*self.mouse_pos, 0, self.mv_mat, self.p_mat, self.v_rect, *temp_val)
+        mouse_near = np.array([v.value for v in temp_val])
+        gluUnProject(*self.mouse_pos, 1, self.mv_mat, self.p_mat, self.v_rect, *temp_val)
+        mouse_far = np.array([v.value for v in temp_val])
+        t = mouse_near[2] / (mouse_near[2] - mouse_far[2])
+        if t >= 0.:
+            point_on_plane = mouse_far * t + mouse_near * (1 - t)
+            detect_R = (self.camera.z)**2 / 5000
+            detect_R = np.clip(detect_R, 3., 30.)
+            nbd, _ = nbd_detecter(self.point_xy, point_on_plane[:2].reshape(1, 2), \
+                detect_R = detect_R, partition_data = self.partition_data)
+            nbd = nbd[0]
+        if t >= 0. and len(nbd):
+            nbd_xy = self.point_xy[nbd, :].copy()
+            nbd_z = self.point_z[nbd].copy()
+            self.GL_objs[0] = Point(self, np.column_stack([nbd_xy, nbd_z]), 5, color = "k")
+        else:
+            self.GL_objs[0] = Point(self, np.zeros((1, 3)), 1)
+
+
+    def on_draw(self):
+
+        # clears the background with the background color
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+
+        # wire-frame mode
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+        self.mouse_detect()
+
+        for obj in self.GL_objs:
+            obj.draw()
+
+        glFlush()
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        self.mouse_pos = (x, y)
+
+    def on_mouse_scroll(self, x, y, scroll_x, scroll_y): # zoom
+        self.mouse_pos = (x, y)
+        self.camera.on_mouse_scroll(scroll_x, scroll_y)
+
+    def on_mouse_drag(self, x, y, dx, dy, button, modifiers):
+        self.mouse_pos = (x, y)
+        key = pyglet.window.key
+        if button == pyglet.window.mouse.MIDDLE:
+            self.camera.mouse_MIDDLE(dx, dy)
+            return
+        if button == pyglet.window.mouse.RIGHT:
+            self.camera.mouse_RIGHT(dx, dy)
+            return
+
+    def on_key_press(self, symbol, modifiers):
+        key = pyglet.window.key
+        if symbol == key.ESCAPE:
+            pyglet.app.event_loop.exit()
+        if symbol == key.R:
+            x = self.camera.x
+            y = self.camera.y
+            z = self.camera.z
+            rx = self.camera.rx
+            ry = self.camera.ry
+            rz = self.camera.rz
+            for t in np.arange(0., 1., 0.1):
+                t = 3 * t**2 - 2 * t**3
+                self.camera.x = self.camera_init_setting["x"] * t + x * (1 - t)
+                self.camera.y = self.camera_init_setting["y"] * t + y * (1 - t)
+                self.camera.z = self.camera_init_setting["z"] * t + z * (1 - t)
+                self.camera.rx = self.camera_init_setting["rx"] * t + rx * (1 - t)
+                self.camera.ry = self.camera_init_setting["ry"] * t + ry * (1 - t)
+                self.camera.rz = self.camera_init_setting["rz"] * t + rz * (1 - t)
+                self.on_draw()
+                self.flip()
+            self.camera.__init__(self.camera_init_setting)
+        if symbol == key.F8:
+            rx = self.camera.rx
+            rz = self.camera.rz
+            closest_rx = round(rx / 90) * 90
+            closest_rz = round(rz / 90) * 90
+            for t in np.arange(0., 1., 0.1):
+                t = 3 * t**2 - 2 * t**3
+                self.camera.rx = closest_rx * t + rx * (1 - t)
+                self.camera.rz = closest_rz * t + rz * (1 - t)
+                self.on_draw()
+                self.flip()
+            self.camera.rx = closest_rx
+            self.camera.rz = closest_rz
+        if symbol == key.Q:
+            print(self.camera.rx, self.camera.ry, self.camera.rz)
+            print(self.camera.x, self.camera.y, self.camera.z)
+
+    # def on_window_close(self, window):
+    #     event_loop.exit()
+
+class GL_camera(Window):
     def __init__(self, setting = None):
         if setting:
             self.x = setting["x"]
@@ -35,22 +246,20 @@ class GL_camera():
         self.rz += dx / 5.0
         self.rx -= dy / 5.0
 
-camera_init_setting = {"x": 0, "y":0, "z":-150, "rx":-69.4, "ry":0, "rz":24.6}
-camera = GL_camera(camera_init_setting)
-
-class Surface():
-    def __init__(self, mx, my, mz, color):
-        super().__init__()
+class Surface(Window):
+    def __init__(self, window, mx, my, mz, color):
+        # super().__init__()
+        self.window = window
         vertices = []
-        self.width, self.height = mz.shape
+        self.w, self.h = mz.shape
         # indices = []
         # r, c = mz.shape
         # pts = np.column_stack([mx.reshape(-1), my.reshape(-1), mz.reshape(-1)])
 
-        for j in range(self.height - 1):
+        for j in range(self.h - 1):
             # a row of triangles
             row = []
-            for i in range(self.width):
+            for i in range(self.w):
                 row.extend((mx[i, j], my[i, j], mz[i, j]))
                 row.extend((mx[i, j + 1], my[i, j + 1], mz[i, j + 1]))
             vertices.append(row)
@@ -110,23 +319,23 @@ class Surface():
 
     def draw(self):
         glLoadIdentity()
-        global camera
-        glTranslatef(camera.x, camera.y, camera.z)
-        glRotatef(camera.rx, 1, 0, 0)
-        glRotatef(camera.ry, 0, 1, 0)
-        glRotatef(camera.rz, 0, 0, 1)
+        glTranslatef(self.window.camera.x, self.window.camera.y, self.window.camera.z)
+        glRotatef(self.window.camera.rx, 1, 0, 0)
+        glRotatef(self.window.camera.ry, 0, 1, 0)
+        glRotatef(self.window.camera.rz, 0, 0, 1)
         # glColor3f(0.5, 0.5, 0.5)
 
         for i in range(len(self.rows)):
-            pyglet.graphics.draw(self.width * 2, GL_TRIANGLE_STRIP, 
+            pyglet.graphics.draw(self.w * 2, GL_TRIANGLE_STRIP, 
                 ('v3f', self.rows[i]), 
                 ('c4f', self.colors[i]))
 
         # self.batch.draw()
 
-class Line():
-    def __init__(self, line_points, line_width):
-        super().__init__()
+class Line(Window):
+    def __init__(self, window, line_points, line_width):
+        # super().__init__()
+        self.window = window
         self.line_count = len(line_points)
         self.line_points = line_points
         # self.line_points[:, 1] *= -1
@@ -136,11 +345,10 @@ class Line():
 
     def draw(self):
         glLoadIdentity()
-        global camera
-        glTranslatef(camera.x, camera.y, camera.z)
-        glRotatef(camera.rx, 1, 0, 0)
-        glRotatef(camera.ry, 0, 1, 0)
-        glRotatef(camera.rz, 0, 0, 1)
+        glTranslatef(self.window.camera.x, self.window.camera.y, self.window.camera.z)
+        glRotatef(self.window.camera.rx, 1, 0, 0)
+        glRotatef(self.window.camera.ry, 0, 1, 0)
+        glRotatef(self.window.camera.rz, 0, 0, 1)
         # glColor3f(0.5, 0.5, 0.5)
 
         glLineWidth(self.line_width)
@@ -148,16 +356,23 @@ class Line():
             ('v3f', self.line_points), 
             ('c4f', self.line_colors))
 
-class Point():
-    def __init__(self, points, pointsize):
-        super().__init__()
+class Point(Window):
+    def __init__(self, window, points, pointsize, color = None):
+        # super().__init__()
+        self.window = window
         self.points_count = len(points)
         self.points = np.array(points)
         # self.points[:, 1] *= -1
         self.pointsize = pointsize
-        self.data_points_color = self.color_plot()
-        # self.data_points_color = np.column_stack([self.data_points_color, np.ones(len(self.data_points_color))]).reshape(-1)
-        self.data_points_color = self.data_points_color.reshape(-1)
+        if color is None:
+            self.data_points_color = self.color_plot()
+            # self.data_points_color = np.column_stack([self.data_points_color, np.ones(len(self.data_points_color))]).reshape(-1)
+            self.data_points_color = self.data_points_color.reshape(-1)
+        else:
+            if color == "k":
+                self.data_points_color = np.tile(np.zeros(3), (len(self.points), 1)).reshape(-1)
+            if color == "r":
+                self.data_points_color = np.tile(np.array([1., 0., 0.]), (len(self.points), 1)).reshape(-1)
         self.points = self.points.reshape(-1)
 
     def color_plot(self):
@@ -170,11 +385,10 @@ class Point():
 
     def draw(self):
         glLoadIdentity()
-        global camera
-        glTranslatef(camera.x, camera.y, camera.z)
-        glRotatef(camera.rx, 1, 0, 0)
-        glRotatef(camera.ry, 0, 1, 0)
-        glRotatef(camera.rz, 0, 0, 1)
+        glTranslatef(self.window.camera.x, self.window.camera.y, self.window.camera.z)
+        glRotatef(self.window.camera.rx, 1, 0, 0)
+        glRotatef(self.window.camera.ry, 0, 1, 0)
+        glRotatef(self.window.camera.rz, 0, 0, 1)
         # glColor3f(0.5, 0.5, 0.5)
 
         glPointSize(self.pointsize)
@@ -182,260 +396,10 @@ class Point():
             ('v3f', self.points),
             ('c3f', self.data_points_color))
 
-width = int(screensize[0] * 0.8)
-height = int(screensize[1] * 0.8)
-
-# config = pyglet.gl.Config(sample_buffers=1, samples=4)
-# window = pyglet.window.Window(width=width, height=height, config=config, caption='GL_Plot', resizable=True)
-window = pyglet.window.Window(width=width, height=height, caption='GL_Plot', resizable=True)
-window.set_location((screensize[0] - window.width) // 2, (screensize[1] - window.height) // 2)
-cursor = window.get_system_mouse_cursor(window.CURSOR_CROSSHAIR)
-window.set_mouse_cursor(cursor)
-# backgroundcolor
-glClearColor(0.95, 0.95, 0.95, 1)
-
-glEnable(GL_DEPTH_TEST)
-# glDisable(GL_DEPTH_TEST)
-# glDepthFunc(GL_NEVER)
-glShadeModel(GL_SMOOTH)
-glMatrixMode(GL_PROJECTION)
-glLoadIdentity()
-gluPerspective(45., 1., 0.1, 800.)
-glMatrixMode(GL_MODELVIEW)
-
-glEnable(GL_LINE_SMOOTH)
-glHint(GL_LINE_SMOOTH_HINT, GL_NICEST)
-glEnable(GL_POINT_SMOOTH)
-glHint(GL_POINT_SMOOTH_HINT, GL_NICEST)
-glEnable(GL_POLYGON_SMOOTH)
-glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST)
-
-glEnable(GL_BLEND)
-glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-# glEnable(GL_CULL_FACE)
-glDisable(GL_CULL_FACE)
-
-
-GL_objs = []
-GL_objs.append(Point(np.zeros((1, 3)), 3))
-
-from calculate import *
-x = np.arange(-100., 100. + 10**-10, 1.3)
-y = np.arange(-100., 100. + 10**-10, 1.3)
-mx, my = np.meshgrid(x, y, indexing='ij')
-# mz = (mx**2 +my**2) / (5 * 10**2) + 10
-mz = np.cos(2 * np.pi * mx/70) * np.cos(2 * np.pi * my/88) * 10 + np.random.randn(*mx.shape)*2
-# mz = (mx**2 + my**2 - 20 * mx - 40 * my) / (3*10**2)
-# mz = (mx**2 + my**2 - 20 * mx - 40 * my) / (5 * 10**2) + np.random.randn(*mx.shape)*2
-point_xy = np.column_stack([mx.reshape(-1), my.reshape(-1)])
-point_z = mz.reshape(-1)
-interpolation_data = smooth_calculator(point_xy, \
-    mz.reshape(-1), smoothness_R = 10., grid_pitch = 5.)
-GL_objs.append(Point(np.column_stack([point_xy, mz.reshape(-1)]), 3))
-# interpolation_data = {"x_start_end_pitch": (-100., 100., 10.), 
-#     "y_start_end_pitch": (-100., 100., 10.), 
-#     "grid_shape": mx.shape, 
-#     "grid_x": mx, 
-#     "grid_y": my, 
-#     "grid_z": mz}
-# x = np.arange(30, 110. + 10**-10, 1.3)+20
-# y = np.arange(30, 110. + 10**-10, 1.3)+20
-# mx1, my1 = np.meshgrid(x, y, indexing='ij')
-# mz1 = interpolation_2D(mx1, my1, interpolation_data)
-# GL_objs.append(Point(np.column_stack([mx1.reshape(-1), my1.reshape(-1), mz1.reshape(-1)]), 5))
-
-plot_grid = True
-if plot_grid:
-    temp = np.arange(-50, 50 + 1., 20)
-    temp_ = np.column_stack([temp, np.full_like(temp, 50), np.zeros_like(temp)])
-    temp__ = temp_.copy()
-    temp__[:, 1] = -temp__[:, 1]
-    temp_ = np.transpose(np.concatenate([temp_[..., None], temp__[..., None]], axis = -1), (0, 2, 1))
-    GL_objs.append(Line(temp_.reshape(-1, 3), 1))
-
-    temp_ = np.column_stack([np.full_like(temp, 50), temp, np.zeros_like(temp)])
-    temp__ = temp_.copy()
-    temp__[:, 0] = -temp__[:, 0]
-    temp_ = np.transpose(np.concatenate([temp_[..., None], temp__[..., None]], axis = -1), (0, 2, 1))
-    GL_objs.append(Line(temp_.reshape(-1, 3), 1))
-
-    temp = np.array([10., 10., 10.])
-    temp_ = np.tile(temp, (4, 1))
-    temp_[1:3, 1] = -temp_[1:3, 1]
-    temp_[2:4, 0] = -temp_[2:4, 0]
-    temp__ = np.zeros((4, 2, 3))
-    temp__[:, 0, :] = temp_.copy()
-    temp__[:-1, 1, :] = temp_[1:].copy()
-    temp__[-1, 1, :] = temp.copy()
-    temp__ = temp__.reshape(-1, 3)
-    temp_ = temp__.copy()
-    temp__[:, 2] = -temp__[:, 2]
-    temp_ = np.row_stack([temp_, temp__])
-    GL_objs.append(Line(temp_.copy(), 1))
-
-    GL_objs.append(Line(np.array([[0, 0, 0.], [100, 0, 0], \
-                                [0, 0, 0.], [0, 100, 0], \
-                                [0, 0, 0.], [0, 0, 20]]), 3))
-
-# GL_objs.append(Surface(mx, my, mz, 'b'))
-GL_objs.append(Surface(interpolation_data["grid_x"], interpolation_data["grid_y"], \
-    interpolation_data["grid_z"], 'b'))
-
-@window.event
-def on_resize(width, height):
-    glViewport(0, 0, width, height)
-
-    glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()
-    gluPerspective(45., width / height, 0.1, 800.)
-
-    glMatrixMode(GL_MODELVIEW)
-    glLoadIdentity()
-
-    return pyglet.event.EVENT_HANDLED
-
-mv_mat = (GLdouble * 16)()
-p_mat  = (GLdouble * 16)()
-v_rect = (GLint * 4)()
-mouse_detect = True
-_, partition_data = nbd_detecter(point_xy, np.zeros((1, 2)), detect_R = 1, \
-        partition_pitch = 5, partition_data = None)
-@window.event
-def on_draw():
-
-    # clears the background with the background color
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-
-    # wire-frame mode
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-
-    glGetDoublev(GL_MODELVIEW_MATRIX, mv_mat)
-    glGetDoublev(GL_PROJECTION_MATRIX, p_mat)
-    glGetIntegerv(GL_VIEWPORT, v_rect)
-
-    if mouse_detect:
-        temp_val = [GLdouble() for _ in range(3)]
-        gluUnProject(*mouse_pos, 0, mv_mat, p_mat, v_rect, *temp_val)
-        mouse_near = np.array([v.value for v in temp_val])
-        gluUnProject(*mouse_pos, 1, mv_mat, p_mat, v_rect, *temp_val)
-        mouse_far = np.array([v.value for v in temp_val])
-        t = mouse_near[2] / (mouse_near[2] - mouse_far[2])
-        if t >= 0.:
-            point_on_plane = mouse_far * t + mouse_near * (1 - t)
-            # print("point_on_plane:", point_on_plane)
-            # print("ray:", mouse_far - mouse_near)
-            # print("mouse_pos:", mouse_pos)
-            nbd, _ = nbd_detecter(point_xy, point_on_plane[:2].reshape(1, 2), \
-                detect_R = max(abs(camera.z) * 0.1, 3), partition_data = partition_data)
-            nbd = nbd[0]
-        if t >= 0. and len(nbd):
-            nbd_xy = point_xy[nbd, :].copy()
-            nbd_z = point_z[nbd].copy()
-            GL_objs[0] = Point(np.column_stack([nbd_xy, nbd_z]), 10)
-        else:
-            GL_objs[0] = Point(np.zeros((1, 3)), 1)
-
-    for obj in GL_objs:
-        obj.draw()
-
-    glFlush()
-
-mouse_pos = (0, 0)
-@window.event
-def on_mouse_motion(x, y, dx, dy):
-    global mouse_pos
-    mouse_pos = (x, y)
-#     # window.clear()
-#     # print(x, y)
-#     print("-------------")
-#     thetas = np.array([camera.rx, camera.ry, camera.rz])
-#     cx, cy, cz = np.cos(np.radians(thetas))
-#     sx, sy, sz = np.sin(np.radians(thetas))
-#     Rotate_matrix = np.dot(np.array([[cz, sz, 0.], 
-#                                     [-sz, cz, 0.], 
-#                                     [0., 0., 1.]]), 
-#                     np.dot(np.array([[cy, 0., -sy], 
-#                                     [0., 1., 0.], 
-#                                     [sy, 0., cy]]), 
-#                             np.array([[1., 0., 0.], 
-#                                     [0., cx, sx], 
-#                                     [0., -sx, cx]])))
-#     camera_pos = -np.array([camera.x, camera.y, camera.z])
-#     camera_pos = np.dot(Rotate_matrix, camera_pos[..., None]).reshape(-1)
-#     with np.errstate(divide='ignore'):
-#         camera_pos = camera_pos / np.linalg.norm(camera_pos)
-#         camera_pos = np.nan_to_num(camera_pos, nan = 0., posinf = 0., neginf = 0.)
-#     GL_objs[0] = Point(np.array([camera_pos / i for i in range(1, 10)]) * 2, 5)
-#     print(thetas)
-#     print(camera_pos)
-#     # GL_objs[1] = Point(np.zeros(3)[None, ...] / 10 - 0.5, 20)
-#     # GL_objs[1] = Line(np.array([camera_pos, np.zeros(3)]), 2)
-#     # GL_objs.insert(1, )
-#     # del GL_objs[1]
-
-
-@window.event
-def on_mouse_scroll(x, y, scroll_x, scroll_y): # zoom
-    global mouse_pos
-    mouse_pos = (x, y)
-    camera.on_mouse_scroll(scroll_x, scroll_y)
-
-@window.event
-def on_mouse_drag(x, y, dx, dy, button, modifiers):
-    global mouse_pos
-    mouse_pos = (x, y)
-    key = pyglet.window.key
-    # if button == pyglet.window.mouse.MIDDLE and (modifiers & key.MOD_CTRL):
-    #     x -= window.width // 2
-    #     y -= window.height // 2
-    #     lx = x - dx
-    #     ly = y - dy
-    #     angle = np.angle((x + y * 1J) / ((lx + ly * 1J))) * 50
-    #     camera.MOD_CTRL_mouse_MIDDLE(angle)
-    #     return
-    if button == pyglet.window.mouse.MIDDLE:
-        camera.mouse_MIDDLE(dx, dy)
-        return
-    if button == pyglet.window.mouse.RIGHT:
-        camera.mouse_RIGHT(dx, dy)
-        return
-
-@window.event
-def on_key_press(symbol, modifiers):
-    key = pyglet.window.key
-    if symbol == key.R:
-        x = camera.x
-        y = camera.y
-        z = camera.z
-        rx = camera.rx
-        ry = camera.ry
-        rz = camera.rz
-        for t in np.arange(0., 1., 0.1):
-            t = 3 * t**2 - 2 * t**3
-            camera.x = camera_init_setting["x"] * t + x * (1 - t)
-            camera.y = camera_init_setting["y"] * t + y * (1 - t)
-            camera.z = camera_init_setting["z"] * t + z * (1 - t)
-            camera.rx = camera_init_setting["rx"] * t + rx * (1 - t)
-            camera.ry = camera_init_setting["ry"] * t + ry * (1 - t)
-            camera.rz = camera_init_setting["rz"] * t + rz * (1 - t)
-            on_draw()
-            window.flip()
-        camera.__init__(camera_init_setting)
-    if symbol == key.F8:
-        rx = camera.rx
-        rz = camera.rz
-        closest_rx = round(rx / 90) * 90
-        closest_rz = round(rz / 90) * 90
-        for t in np.arange(0., 1., 0.1):
-            t = 3 * t**2 - 2 * t**3
-            camera.rx = closest_rx * t + rx * (1 - t)
-            camera.rz = closest_rz * t + rz * (1 - t)
-            on_draw()
-            window.flip()
-        camera.rx = closest_rx
-        camera.rz = closest_rz
-    if symbol == key.Q:
-        print(camera.rx, camera.ry, camera.rz)
-        print(camera.x, camera.y, camera.z)
-
-pyglet.app.run()
+if __name__ == "__main__":
+    user32 = ctypes.windll.user32
+    screensize = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+    width = int(screensize[0] * 0.8)
+    height = int(screensize[1] * 0.8)
+    window = Window(width = width, height = height, caption = 'GL_Plot', resizable=True)
+    pyglet.app.run()
