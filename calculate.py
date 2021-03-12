@@ -674,4 +674,53 @@ def smooth_calculator(pts, z, smoothness_R, grid_pitch, partition_data = None, p
         print("\nsmooth_calculator time:", time.time() - start_time)
     return interpolation_data
 
+def interpolation_grad_func(x, y, func, epsilon = 10**-10, form = "stack_array"):
+    assert form in ["stack_array", "split_array", "x", "y"]
+    h = epsilon
+    if form != "y":
+        fx1 = func(x - h, y)
+        fx2 = func(x + h, y)
+        dx = (fx2 - fx1) / h
+    if form != "x":
+        fy1 = func(x, y - h)
+        fy2 = func(x, y + h)
+        dy = (fy2 - fy1) / h
+    if form == "x":
+        return dx
+    if form == "y":
+        return dy
+    if form == "stack_array":
+        return np.concatenate([dx[..., None], dy[..., None]], axis = -1)
+    if form == "split_array":
+        return dx, dy
+
+def interpolation_Hess_func(x, y, func, epsilon = 10**-10, form = "stack_array"):
+    assert form in ["stack_array", "split_array", "xx", "xy", "yy"]
+    h = epsilon
+    f = func(x, y)
+    if form not in  ["xy", "yy"]:
+        fx1 = func(x - h, y)
+        fx2 = func(x + h, y)
+        dxx = (fx2 + fx1 - 2 * f) / h**2
+    if form not in  ["yy"]:
+        fy1 = func(x, y - h)
+        fy2 = func(x, y + h)
+        dyy = (fy2 + fy1 - 2 * f) / h**2
+    if form not in  ["xx", "yy"]:
+        dfx_y1 = interpolation_grad_func(x, y - h, func, epsilon = h, form = "x")
+        dfx_y2 = interpolation_grad_func(x, y + h, func, epsilon = h, form = "x")
+        dxy = (dfx_y2 - dfx_y1) / h
+    if form == "xx":
+        return dxx
+    if form == "yy":
+        return dyy
+    if form == "xy":
+        return dxy
+    if form == "stack_array":
+        dxx = dxx[..., None]
+        dyy = dyy[..., None]
+        dxy = dxy[..., None]
+        return np.transpose(np.array([[dxx, dxy], [dxy, dyy]]), tuple([i + 2 for i in range(len(dxx.shape))] + [0, 1]))
+    if form == "split_array":
+        return dxx, dxy, dyy
 

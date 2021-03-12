@@ -45,4 +45,4 @@ def UA3P_reader(source = "XX.csv", output_column_stack = "xy", dim = "auto", dir
         return UA3P_x, UA3P_y, UA3P_z, UA3P_zd, dim, direction
     if output_column_stack == "xy":
         return UA3P_array[:, :2], UA3P_z, UA3P_zd, dim, direction
-    return UA3P_array
+    return UA3P_array, dim, direction
