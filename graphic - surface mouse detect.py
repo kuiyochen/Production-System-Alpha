@@ -8,7 +8,7 @@ from pyglet.gl import *
 import ctypes
 from calculate import *
 
-# import warnings
+import warnings
 # with warnings.catch_warnings():
 #     warnings.simplefilter('error')
 #     function_raising_warning()
@@ -152,15 +152,16 @@ class Window(pyglet.window.Window):
         if abs(unit3d[2]) / np.linalg.norm(unit3d) <= 0.99:
             unit  = mouse_far[:2] - mouse_near[:2]
             unit  = unit / np.linalg.norm(unit)
-            if abs(unit[1]) < 10**-6:
-                if mouse_near[1] < self.point_xyz_miny or mouse_near[1] > self.point_xyz_maxy:
-                    self.GL_objs[0] = Point(self, np.zeros((1, 3)), 1)
-                    return
-            if abs(unit[0]) < 10**-6:
-                if mouse_near[0] < self.point_xyz_minx or mouse_near[0] > self.point_xyz_maxx:
-                    self.GL_objs[0] = Point(self, np.zeros((1, 3)), 1)
-                    return
-            m = unit[1] / unit[0]
+            # if abs(unit[1]) < 10**-6:
+            #     if mouse_near[1] < self.point_xyz_miny or mouse_near[1] > self.point_xyz_maxy:
+            #         self.GL_objs[0] = Point(self, np.zeros((1, 3)), 1)
+            #         return
+            # if abs(unit[0]) < 10**-6:
+            #     if mouse_near[0] < self.point_xyz_minx or mouse_near[0] > self.point_xyz_maxx:
+            #         self.GL_objs[0] = Point(self, np.zeros((1, 3)), 1)
+            #         return
+            with np.errstate(divide='ignore'):
+                m = unit[1] / unit[0]
             boundarypoints = []
             y1 = m * (self.point_xyz_minx - mouse_near[0]) + mouse_near[1]
             if self.point_xyz_miny < y1 and y1 < self.point_xyz_maxy:
@@ -168,10 +169,12 @@ class Window(pyglet.window.Window):
             y2 = m * (self.point_xyz_maxx - mouse_near[0]) + mouse_near[1]
             if self.point_xyz_miny < y2 and y2 < self.point_xyz_maxy:
                 boundarypoints.append(np.array([self.point_xyz_maxx, y2]))
-            x1 = (self.point_xyz_miny - mouse_near[1]) / m + mouse_near[0]
+            with np.errstate(divide='ignore'):
+                x1 = (self.point_xyz_miny - mouse_near[1]) / m + mouse_near[0]
             if self.point_xyz_minx < x1 and x1 < self.point_xyz_maxx:
                 boundarypoints.append(np.array([x1, self.point_xyz_miny]))
-            x2 = (self.point_xyz_maxy - mouse_near[1]) / m + mouse_near[0]
+            with np.errstate(divide='ignore'):
+                x2 = (self.point_xyz_maxy - mouse_near[1]) / m + mouse_near[0]
             if self.point_xyz_minx < x2 and x2 < self.point_xyz_maxx:
                 boundarypoints.append(np.array([x2, self.point_xyz_maxy]))
             if len(boundarypoints) == 0:
@@ -210,9 +213,10 @@ class Window(pyglet.window.Window):
                 self.GL_objs[0] = Point(self, np.zeros((1, 3)), 1)
                 return
             temp = np.mean(nbd_xyz, axis = 0).reshape(1, 3)
-            temp = np.dot(temp.reshape(1, 3) - mouse_near, np.dot(unit3d.reshape(3, 1), unit3d.reshape(1, 3))).reshape(-1) + mouse_near
-            temp_z = interpolation_2D(temp[0].reshape(1, 1), temp[1].reshape(1, 1), interpolation_data = self.interpolation_data)
-            self.GL_objs[0] = Point(self, np.append(temp[:2], temp_z).reshape(1, 3), 15, color = "k")
+            self.GL_objs[0] = Point(self, temp.reshape(1, 3), 15, color = "k")
+            # temp = np.dot(temp.reshape(1, 3) - mouse_near, np.dot(unit3d.reshape(3, 1), unit3d.reshape(1, 3))).reshape(-1) + mouse_near
+            # temp_z = interpolation_2D(temp[0].reshape(1, 1), temp[1].reshape(1, 1), interpolation_data = self.interpolation_data)
+            # self.GL_objs[0] = Point(self, np.append(temp[:2], temp_z).reshape(1, 3), 15, color = "k")
         else:
             self.GL_objs[0] = Point(self, np.zeros((1, 3)), 1)
 
@@ -223,6 +227,9 @@ class Window(pyglet.window.Window):
 
         # wire-frame mode
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+        # with warnings.catch_warnings():
+            # warnings.simplefilter('error')
+            # self.mouse_detect()
         self.mouse_detect()
 
         for obj in self.GL_objs:
@@ -334,29 +341,6 @@ class Surface(Window):
                 row.extend((mx[i, j + 1], my[i, j + 1], mz[i, j + 1]))
             vertices.append(row)
 
-        # # for j in range(c - 1):
-        # #     # row = []
-        # #     # for i in range(r):
-        # #     #     row.append(c * i + j)
-        # #     #     row.append(row[-1] + 1)
-        # #     temp = np.tile(np.arange(r) * c + j, (1, 2))
-        # #     temp[:, 1] += 1
-        # #     indices.append(temp.reshape(-1).astype(int))
-        # temp = np.arange(r * c).reshape(r, c)
-        # temp = np.concatenate([temp[:-1, :][..., None], temp[1:, :][..., None]], axis = -1)
-        # indices = temp.reshape(r - 1, -1).astype(int)
-
-        # self.batch = pyglet.graphics.Batch()
-        # for i in range(r - 1):
-        #     if i>0:
-        #         break
-        #     self.batch.add_indexed(len(indices[i]),
-        #                             GL_TRIANGLE_STRIP,
-        #                             pyglet.graphics.Group(),
-        #                             indices[i],
-        #                             ('v3f/static', pts.reshape(-1)),
-        #                             ('c4f/static', [0., 1., 0.5, 0.7] * len(indices[i])))
-
         colormax = np.array(vertices).reshape(-1, 3)[:, 2]
         colormin = np.amin(colormax)
         colormax = np.amax(colormax)
@@ -369,15 +353,12 @@ class Surface(Window):
             if color == 'b':
                 DC = np.array([0, 100, 255, 0.7 * 255]) / 255
                 LC = np.array([100, 180, 255, 0.7 * 255]) / 255
-                # color_= np.column_stack([color_, color_, np.ones_like(color_), np.zeros_like(color_) + 0.7]).reshape(-1)
             if color == 'g':
                 DC = np.array([0, 153, 51, 0.7 * 255]) / 255
                 LC = np.array([153, 255, 204, 0.7 * 255]) / 255
-                # color_ = np.column_stack([color_, np.ones_like(color_), color_, np.zeros_like(color_) + 0.7]).reshape(-1)
             if color == 'r':
                 DC = np.array([204, 0, 0, 0.7 * 255]) / 255
                 LC = np.array([255, 153, 204, 0.7 * 255]) / 255
-                # color_ = np.column_stack([np.ones_like(color_), color_, color_, np.zeros_like(color_) + 0.7]).reshape(-1)
             DC = np.tile(DC, (len(color_), 1))
             LC = np.tile(LC, (len(color_), 1))
             color_= color_[..., None]

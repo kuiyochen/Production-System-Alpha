@@ -147,10 +147,11 @@ def data_extended(point_xy, point_z, detect_R,
         return ex_point_xy, ex_point_z, partition_data
 
 def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
-    partition_pitch = 0.1, partition_data = None):
+    partition_pitch = 0.1, partition_data = None, print_out = False):
     if dim == 2:
-        import time
-        start_time = time.time()
+        if print_out:
+            import time
+            start_time = time.time()
 
         # pts = (np.random.rand(10**4 * 2, 2) * 2 - 1)
         # detect_pts = (np.random.rand((2 * 100)**2, 2) * 2 - 1) * 1.2
@@ -159,9 +160,10 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
         # partition_pitch = 0.1
         # partition_data = None
 
-        pp = np.linspace(0, 100.1, len(detect_pts)).astype(int)
-        filter_pp = np.diff(np.append(pp, 100)) > 0
-        filter_pp[-1] = True
+        if print_out:
+            pp = np.linspace(0, 100.1, len(detect_pts)).astype(int)
+            filter_pp = np.diff(np.append(pp, 100)) > 0
+            filter_pp[-1] = True
 
         detect_min_x = np.min(detect_pts[:, 0])
         detect_total_distance_x = (np.max(detect_pts[:, 0]) - detect_min_x)
@@ -216,9 +218,10 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
         temp = (int(2 * detect_R / partition_pitch) + 1)
         nbd_partition_id = (temp + 1) // 2 if temp % 2 else temp // 2
         nbd_of_detect_pts_ids = []
-        print("\nprepare time:", time.time() - start_time)
+        if print_out:
+            print("\nprepare time:", time.time() - start_time)
         for i in range(len(detect_pts)):
-            if filter_pp[i]:
+            if print_out and filter_pp[i]:
                 print(pp[i], end = "\r")
             partition_id_x = int((detect_pts[i, 0] - min_x) / partition_pitch_x)
             partition_id_y = int((detect_pts[i, 1] - min_y) / partition_pitch_y)
@@ -244,7 +247,8 @@ def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
             # temp = pts[np.linalg.norm(temp, axis = 1) < detect_R, :]
             # print("nbd time: ", time.time() - s_time)
 
-        print("\nALL:", time.time() - start_time)
+        if print_out:
+            print("\nALL:", time.time() - start_time)
         return nbd_of_detect_pts_ids, partition_data
 
 def get_gcode(contact_points_in_func_coordinate, \
@@ -592,9 +596,10 @@ def interpolation_2D(x, y, interpolation_data = {"x_start_end_pitch": (-1., 1., 
     grid_shape = interpolation_data["grid_shape"]
     # grid_x = interpolation_data["grid_x"]
     # grid_y = interpolation_data["grid_y"]
-    grid_z = interpolation_data["grid_z"].copy()
-    grid_z = np.column_stack([np.zeros(len(grid_z)), grid_z, np.zeros(len(grid_z))])
-    grid_z = np.row_stack([np.zeros(grid_z.shape[1]), grid_z, np.zeros(grid_z.shape[1])])
+    # grid_z = interpolation_data["grid_z"].copy()
+    # grid_z = np.column_stack([np.zeros(len(grid_z)), grid_z, np.zeros(len(grid_z))])
+    # grid_z = np.row_stack([np.zeros(grid_z.shape[1]), grid_z, np.zeros(grid_z.shape[1])])
+    grid_z = np.pad(interpolation_data["grid_z"].copy(), 1, 'constant', constant_values = 0.)
 
     id_x, res_x = divmod((x - x_start), x_pitch)
     id_y, res_y = divmod((y - y_start), y_pitch)
@@ -613,9 +618,10 @@ def interpolation_2D(x, y, interpolation_data = {"x_start_end_pitch": (-1., 1., 
     z[id_y >= grid_shape[1]] = 0.
     return z
 
-def smooth_calculator(pts, z, smoothness_R, grid_pitch, partition_data = None):
-    import time
-    start_time = time.time()
+def smooth_calculator(pts, z, smoothness_R, grid_pitch, partition_data = None, print_out = False):
+    if print_out:
+        import time
+        start_time = time.time()
     x_pitch = grid_pitch
     y_pitch = grid_pitch
     x_start = np.min(pts[:, 0]) - x_pitch
@@ -649,12 +655,13 @@ def smooth_calculator(pts, z, smoothness_R, grid_pitch, partition_data = None):
         temp3 = temp2 * temp
         temp = 3 * temp2 - 2 * temp3
         return temp / np.sum(temp)
-    pp = np.linspace(0, 100.1, len(calculate_pts)).astype(int)
-    filter_pp = np.diff(np.append(pp, 100)) > 0
-    filter_pp[-1] = True
+    if print_out:
+        pp = np.linspace(0, 100.1, len(calculate_pts)).astype(int)
+        filter_pp = np.diff(np.append(pp, 100)) > 0
+        filter_pp[-1] = True
     temp_z = []
     for i in range(len(calculate_pts)):
-        if filter_pp[i]:
+        if print_out and filter_pp[i]:
             print(pp[i], end = "\r")
         if len(nbd_of_detect_pts_ids[i]) == 0:
             temp_z.append(0.)
@@ -663,7 +670,8 @@ def smooth_calculator(pts, z, smoothness_R, grid_pitch, partition_data = None):
         weights = kernal(temp_norms)
         temp_z.append(np.dot(z[nbd_of_detect_pts_ids[i]], weights))
     interpolation_data["grid_z"] = np.array(temp_z).reshape(*mx.shape)
-    print("\nsmooth_calculator time:", time.time() - start_time)
+    if print_out:
+        print("\nsmooth_calculator time:", time.time() - start_time)
     return interpolation_data
 
 

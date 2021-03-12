@@ -54,8 +54,8 @@ class Window(pyglet.window.Window):
         self.GL_objs = []
         self.GL_objs.append(Point(self, np.zeros((1, 3)), 3))
 
-        x = np.arange(-100., 100. + 10**-10, 1.3)
-        y = np.arange(-100., 100. + 10**-10, 1.3)
+        x = np.arange(-10., 100. + 10**-10, 1.3) + 200
+        y = np.arange(-10., 100. + 10**-10, 1.3) + 150
         mx, my = np.meshgrid(x, y, indexing='ij')
         # mz = (mx**2 +my**2) / (5 * 10**2) + 10
         mz = np.cos(2 * np.pi * mx/70) * np.cos(2 * np.pi * my/88) * 10 + np.random.randn(*mx.shape)*2
@@ -263,29 +263,6 @@ class Surface(Window):
                 row.extend((mx[i, j], my[i, j], mz[i, j]))
                 row.extend((mx[i, j + 1], my[i, j + 1], mz[i, j + 1]))
             vertices.append(row)
-
-        # # for j in range(c - 1):
-        # #     # row = []
-        # #     # for i in range(r):
-        # #     #     row.append(c * i + j)
-        # #     #     row.append(row[-1] + 1)
-        # #     temp = np.tile(np.arange(r) * c + j, (1, 2))
-        # #     temp[:, 1] += 1
-        # #     indices.append(temp.reshape(-1).astype(int))
-        # temp = np.arange(r * c).reshape(r, c)
-        # temp = np.concatenate([temp[:-1, :][..., None], temp[1:, :][..., None]], axis = -1)
-        # indices = temp.reshape(r - 1, -1).astype(int)
-
-        # self.batch = pyglet.graphics.Batch()
-        # for i in range(r - 1):
-        #     if i>0:
-        #         break
-        #     self.batch.add_indexed(len(indices[i]),
-        #                             GL_TRIANGLE_STRIP,
-        #                             pyglet.graphics.Group(),
-        #                             indices[i],
-        #                             ('v3f/static', pts.reshape(-1)),
-        #                             ('c4f/static', [0., 1., 0.5, 0.7] * len(indices[i])))
 
         colormax = np.array(vertices).reshape(-1, 3)[:, 2]
         colormin = np.amin(colormax)
