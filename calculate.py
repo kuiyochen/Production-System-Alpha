@@ -76,6 +76,7 @@ extended_mode = {"xy_shape": "circle", # "normal to boundary"
                 }
 def data_extended(point_xy, point_z, detect_R, 
     smoothness_R, 
+    smoothness_grid_pitch, 
     reference_of_zero_correction_point = np.array([0., 0.]), 
     boundary = "auto", 
     extended_mode = extended_mode, 
@@ -171,24 +172,34 @@ def data_extended(point_xy, point_z, detect_R,
                 ex_point_z.append(temp_z)
         else:
             raise TypeError("extended_mode[\"xy_shape\"] must only be \"normal to boundary\" or \"circle\".")
+
+        z_shift = 0.
+        temp_ex_point_xy = np.row_stack(ex_point_xy + [point_xy])
+        temp_ex_point_z = np.concatenate(ex_point_z + [point_z])
+        interpolation_data = smooth_calculator(temp_ex_point_xy, \
+            temp_ex_point_z, smoothness_R = smoothness_R, grid_pitch = smoothness_grid_pitch, partition_data = None)
+        z_shift = interpolation_2D(reference_of_zero_correction_point[0].reshape(1, 1), 
+                    reference_of_zero_correction_point[1].reshape(1, 1), 
+                    interpolation_data = interpolation_data).reshape(-1)[0]
+
         if extended_mode["back_to_zero_extend_radius"] is not None:
             temp_norms = np.linspace(0, extended_mode["back_to_zero_extend_radius"], 1 + int(15 * extended_mode["extend_density"]))[..., None]
             for i in range(len(ray_points_on_boundary)):
                 temp_xy = np.tile(unit_vectors[i], (len(temp_norms), 1)) * temp_norms \
                                  + ex_point_xy[i][-1]
-                temp_z = ex_point_z[i][-1] * np.linspace(0., 1., len(temp_xy))[::-1]
+                temp_z = np.linspace(ex_point_z[i][-1], z_shift, len(temp_xy))
                 ex_point_xy.append(temp_xy)
                 ex_point_z.append(temp_z)
                 temp_xy = np.tile(unit_vectors[i], (len(temp_norms), 1)) * temp_norms \
                                  + temp_xy[-1]
-                temp_z = np.zeros(len(temp_xy))
+                temp_z = np.full(len(temp_xy), z_shift)
                 ex_point_xy.append(temp_xy)
                 ex_point_z.append(temp_z)
         ex_point_xy = np.row_stack(ex_point_xy)
         ex_point_z = np.concatenate(ex_point_z)
         if (np.abs(extended_mode["clipped"]) != np.inf).any():
             ex_point_z = np.clip(ex_point_z, extended_mode["clipped"][0], extended_mode["clipped"][1])
-        return ex_point_xy, ex_point_z, partition_data
+        return ex_point_xy, ex_point_z, z_shift, partition_data
 
 def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \
     partition_pitch = 0.1, partition_data = None, print_out = False):
