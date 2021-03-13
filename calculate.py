@@ -67,12 +67,28 @@ def pol2car(*arg, output_column_stack = True, input_radius_first = True, degree 
 # UA3P_xy, UA3P_z, UA3P_zd, _, _ = UA3P_reader("XX.csv", dim = 3)
 import scipy as sp
 from scipy.spatial import ConvexHull
+extended_mode = {"xy_shape": "circle", # "normal to boundary"
+                "centering": np.array([0., 0.]), # "auto", only used when "xy_shape" is "circle"
+                "extend_radius": 2., 
+                "clipped": np.array([-np.inf, 0.001]), 
+                "back_to_zero_extend_radius": 1., # None if don't want it.
+                "extend_density": 1., 
+                }
 def data_extended(point_xy, point_z, detect_R, 
-    boundary = "auto", extended_mode = "normal to boundary", 
-    extend_distance = 2., extend_density = 1.):
-    if boundary == "auto" and extended_mode == "normal to boundary":
-        center = np.mean(point_xy, axis = 0)
-        degree_pitch = 1 / extend_density
+    smoothness_R, 
+    reference_of_zero_correction_point = np.array([0., 0.]), 
+    boundary = "auto", 
+    extended_mode = extended_mode, 
+    partition_data = None):
+    if boundary == "auto":
+        if extended_mode["xy_shape"] == "circle":
+            if type(extended_mode["centering"]) != type(""):
+                center = extended_mode["centering"]
+            else:
+                center = np.mean(point_xy, axis = 0)
+        else:
+            center = np.mean(point_xy, axis = 0)
+        degree_pitch = 1 / extended_mode["extend_density"]
         degree_pitch = degree_pitch if min(degree_pitch - (360 % degree_pitch), \
                                                 (360 % degree_pitch)) < 0.01 \
                                         else 360. / (int(360. / degree_pitch) + 1.)
@@ -114,7 +130,7 @@ def data_extended(point_xy, point_z, detect_R,
             i += 1
 
         nbd_of_detect_pts_ids, partition_data = nbd_detecter(point_xy, ray_points_on_boundary, detect_R, dim = 2, \
-                partition_pitch = 0.1, partition_data = None)
+                partition_pitch = smoothness_R * 1.1, partition_data = partition_data)
         planes = []
         for i in range(len(nbd_of_detect_pts_ids)):
             temp_xy = point_xy[nbd_of_detect_pts_ids[i], :].copy()
@@ -135,15 +151,43 @@ def data_extended(point_xy, point_z, detect_R,
 
         ex_point_xy = []
         ex_point_z = []
-        temp_norms = np.linspace(0, extend_distance, 1 + int(15 * extend_density))[..., None]
-        for i in range(len(ray_points_on_boundary)):
-            temp_xy = np.tile(unit_vectors[i], (len(temp_norms), 1)) * temp_norms \
-                             + ray_points_on_boundary[i]
-            temp_z = np.dot(planes[i].reshape(1, 3), np.row_stack([temp_xy.T, np.ones(len(temp_xy))])).reshape(-1)
-            ex_point_xy.append(temp_xy)
-            ex_point_z.append(temp_z)
+        if extended_mode["xy_shape"] == "normal to boundary":
+            temp_norms = np.linspace(0, extended_mode["extend_radius"], 1 + int(15 * extended_mode["extend_density"]))[..., None]
+            for i in range(len(ray_points_on_boundary)):
+                temp_xy = np.tile(unit_vectors[i], (len(temp_norms), 1)) * temp_norms \
+                                 + ray_points_on_boundary[i]
+                temp_z = np.dot(planes[i].reshape(1, 3), np.row_stack([temp_xy.T, np.ones(len(temp_xy))])).reshape(-1)
+                ex_point_xy.append(temp_xy)
+                ex_point_z.append(temp_z)
+        elif extended_mode["xy_shape"] == "circle":
+            temp_r = extended_mode["extend_radius"] + np.max(np.linalg.norm(point_xy - center, axis = 1))
+            for i in range(len(ray_points_on_boundary)):
+                temp_norms = np.linspace(0, temp_r - np.linalg.norm(ray_points_on_boundary[i] - center), \
+                    1 + int(15 * extended_mode["extend_density"]))[..., None]
+                temp_xy = np.tile(unit_vectors[i], (len(temp_norms), 1)) * temp_norms \
+                                 + ray_points_on_boundary[i]
+                temp_z = np.dot(planes[i].reshape(1, 3), np.row_stack([temp_xy.T, np.ones(len(temp_xy))])).reshape(-1)
+                ex_point_xy.append(temp_xy)
+                ex_point_z.append(temp_z)
+        else:
+            raise TypeError("extended_mode[\"xy_shape\"] must only be \"normal to boundary\" or \"circle\".")
+        if extended_mode["back_to_zero_extend_radius"] is not None:
+            temp_norms = np.linspace(0, extended_mode["back_to_zero_extend_radius"], 1 + int(15 * extended_mode["extend_density"]))[..., None]
+            for i in range(len(ray_points_on_boundary)):
+                temp_xy = np.tile(unit_vectors[i], (len(temp_norms), 1)) * temp_norms \
+                                 + ex_point_xy[i][-1]
+                temp_z = ex_point_z[i][-1] * np.linspace(0., 1., len(temp_xy))[::-1]
+                ex_point_xy.append(temp_xy)
+                ex_point_z.append(temp_z)
+                temp_xy = np.tile(unit_vectors[i], (len(temp_norms), 1)) * temp_norms \
+                                 + temp_xy[-1]
+                temp_z = np.zeros(len(temp_xy))
+                ex_point_xy.append(temp_xy)
+                ex_point_z.append(temp_z)
         ex_point_xy = np.row_stack(ex_point_xy)
         ex_point_z = np.concatenate(ex_point_z)
+        if (np.abs(extended_mode["clipped"]) != np.inf).any():
+            ex_point_z = np.clip(ex_point_z, extended_mode["clipped"][0], extended_mode["clipped"][1])
         return ex_point_xy, ex_point_z, partition_data
 
 def nbd_detecter(pts, detect_pts, detect_R, dim = 2, \

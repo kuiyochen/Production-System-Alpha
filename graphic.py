@@ -54,8 +54,8 @@ class Window(pyglet.window.Window):
         self.GL_objs = []
         self.GL_objs.append(Point(self, np.zeros((1, 3)), 3))
 
-        x = np.arange(-10., 100. + 10**-10, 1.3) + 200
-        y = np.arange(-10., 100. + 10**-10, 1.3) + 150
+        x = np.arange(-100., 100. + 10**-10, 1.3) + 30
+        y = np.arange(-100., 100. + 10**-10, 1.3) + 30
         mx, my = np.meshgrid(x, y, indexing='ij')
         # mz = (mx**2 +my**2) / (5 * 10**2) + 10
         mz = np.cos(2 * np.pi * mx/70) * np.cos(2 * np.pi * my/88) * 10 + np.random.randn(*mx.shape)*2
@@ -63,9 +63,25 @@ class Window(pyglet.window.Window):
         # mz = (mx**2 + my**2 - 20 * mx - 40 * my) / (5 * 10**2) + np.random.randn(*mx.shape)*2
         self.point_xy = np.column_stack([mx.reshape(-1), my.reshape(-1)])
         self.point_z = mz.reshape(-1)
+        extended_mode = {"xy_shape": "normal to boundary", # "circle"
+                "centering": np.array([0., 0.]), # "auto", only used when "xy_shape" is "circle"
+                "extend_radius": 10., 
+                "clipped": np.array([-20., 20]), 
+                "back_to_zero_extend_radius": 10., # None if don't want it.
+                "extend_density": 1., 
+                }
+        ex_point_xy, ex_point_z, partition_data = data_extended(self.point_xy, self.point_z, detect_R = 15, 
+                smoothness_R = 10, 
+                reference_of_zero_correction_point = np.array([0., 0.]), 
+                boundary = "auto", 
+                extended_mode = extended_mode, 
+                partition_data = None)
+        self.point_xy = np.row_stack([self.point_xy, ex_point_xy])
+        self.point_z = np.concatenate([self.point_z, ex_point_z])
+
         interpolation_data = smooth_calculator(self.point_xy, \
-            mz.reshape(-1), smoothness_R = 10., grid_pitch = 5.)
-        self.GL_objs.append(Point(self, np.column_stack([self.point_xy, mz.reshape(-1)]), 3))
+            self.point_z, smoothness_R = 10., grid_pitch = 5., partition_data = partition_data)
+        self.GL_objs.append(Point(self, np.column_stack([self.point_xy, self.point_z]), 3))
 
         self.plot_grid()
 
@@ -74,6 +90,8 @@ class Window(pyglet.window.Window):
 
         _, self.partition_data = nbd_detecter(self.point_xy, np.zeros((1, 2)), detect_R = 1, \
         partition_pitch = 5, partition_data = None)
+
+        self.mouse_detect_ON = True
 
     def plot_grid(self, grid_width = 20, number_of_grid_in_axis = 5, axis_length = 100, z_grid_height = 10.):
         grid_ = grid_width * number_of_grid_in_axis // 2
@@ -122,6 +140,8 @@ class Window(pyglet.window.Window):
         return pyglet.event.EVENT_HANDLED
 
     def mouse_detect(self):
+        if not self.mouse_detect_ON:
+            return
         glGetDoublev(GL_MODELVIEW_MATRIX, self.mv_mat)
         glGetDoublev(GL_PROJECTION_MATRIX, self.p_mat)
         glGetIntegerv(GL_VIEWPORT, self.v_rect)
@@ -145,7 +165,6 @@ class Window(pyglet.window.Window):
             self.GL_objs[0] = Point(self, np.column_stack([nbd_xy, nbd_z]), 5, color = "k")
         else:
             self.GL_objs[0] = Point(self, np.zeros((1, 3)), 1)
-
 
     def on_draw(self):
 
@@ -214,8 +233,9 @@ class Window(pyglet.window.Window):
             self.camera.rx = closest_rx
             self.camera.rz = closest_rz
         if symbol == key.Q:
-            print(self.camera.rx, self.camera.ry, self.camera.rz)
-            print(self.camera.x, self.camera.y, self.camera.z)
+            # print(self.camera.rx, self.camera.ry, self.camera.rz)
+            # print(self.camera.x, self.camera.y, self.camera.z)
+            self.mouse_detect_ON = not self.mouse_detect_ON
 
     # def on_window_close(self, window):
     #     event_loop.exit()
