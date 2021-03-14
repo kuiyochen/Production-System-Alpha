@@ -28,7 +28,8 @@ class Window(pyglet.window.Window):
         cursor = self.get_system_mouse_cursor(self.CURSOR_CROSSHAIR)
         self.set_mouse_cursor(cursor)
         # backgroundcolor
-        glClearColor(0.95, 0.95, 0.95, 1)
+        backgroundcolor = (0.95, 0.95, 0.95, 1)
+        glClearColor(*backgroundcolor)
 
         glEnable(GL_DEPTH_TEST)
         # glDisable(GL_DEPTH_TEST)
@@ -51,6 +52,16 @@ class Window(pyglet.window.Window):
         # glEnable(GL_CULL_FACE)
         glDisable(GL_CULL_FACE)
 
+        glEnable(GL_FOG)
+        # glFogi(GL_FOG_COORD_SRC, GL_FRAGMENT_DEPTH)
+        backgroundcolor = (GLfloat * 4)(*backgroundcolor)
+        glFogfv (GL_FOG_COLOR, backgroundcolor)
+        glFogf(GL_FOG_START, 1.)
+        glFogf(GL_FOG_END, 600.0)
+        glFogf(GL_FOG_DENSITY, 0.1)
+        glFogi(GL_FOG_MODE, GL_LINEAR) # GL_LINEAR GL_EXP GL_EXP2
+        glHint(GL_FOG_HINT, GL_FASTEST) # GL_FASTEST GL_NICEST
+
         self.GL_objs = []
         self.GL_objs.append(Point(self, np.zeros((1, 3)), 3))
 
@@ -71,7 +82,7 @@ class Window(pyglet.window.Window):
                 "extend_density": 1., 
                 }
         smoothness_R = 10.
-        smoothness_grid_pitch = 1.
+        smoothness_grid_pitch = 5.
         ex_point_xy, ex_point_z, z_shift, partition_data = data_extended(self.point_xy, self.point_z, detect_R = 15, 
                 smoothness_R = smoothness_R, 
                 smoothness_grid_pitch = smoothness_grid_pitch, 
