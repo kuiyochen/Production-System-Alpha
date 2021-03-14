@@ -80,7 +80,7 @@ def data_extended(point_xy, point_z, detect_R,
     reference_of_zero_correction_point = np.array([0., 0.]), 
     boundary = "auto", 
     extended_mode = extended_mode, 
-    partition_data = None):
+    partition_data = None, print_out = False):
     if boundary == "auto":
         if extended_mode["xy_shape"] == "circle":
             if type(extended_mode["centering"]) != type(""):
@@ -177,7 +177,8 @@ def data_extended(point_xy, point_z, detect_R,
         temp_ex_point_xy = np.row_stack(ex_point_xy + [point_xy])
         temp_ex_point_z = np.concatenate(ex_point_z + [point_z])
         interpolation_data = smooth_calculator(temp_ex_point_xy, \
-            temp_ex_point_z, smoothness_R = smoothness_R, grid_pitch = smoothness_grid_pitch, partition_data = None)
+            temp_ex_point_z, smoothness_R = smoothness_R, \
+            grid_pitch = smoothness_grid_pitch, partition_data = None, print_out = print_out)
         z_shift = interpolation_2D(reference_of_zero_correction_point[0].reshape(1, 1), 
                     reference_of_zero_correction_point[1].reshape(1, 1), 
                     interpolation_data = interpolation_data).reshape(-1)[0]
@@ -680,9 +681,11 @@ def smooth_calculator(pts, z, smoothness_R, grid_pitch, partition_data = None, p
     x_pitch = grid_pitch
     y_pitch = grid_pitch
     x_start = np.min(pts[:, 0]) - x_pitch
+    x_start = (x_start // x_pitch) * x_pitch
     x_end = np.max(pts[:, 0]) + x_pitch
     x_end = (x_end // x_pitch + 1) * x_pitch
     y_start = np.min(pts[:, 1]) - y_pitch
+    y_start = (y_start // y_pitch) * y_pitch
     y_end = np.max(pts[:, 1]) + y_pitch
     y_end = (y_end // y_pitch + 1) * y_pitch
     x = np.arange(x_start, x_end + 10**-10, x_pitch)

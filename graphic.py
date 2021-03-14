@@ -71,19 +71,21 @@ class Window(pyglet.window.Window):
                 "extend_density": 1., 
                 }
         smoothness_R = 10.
-        smoothness_grid_pitch = 5.
+        smoothness_grid_pitch = 1.
         ex_point_xy, ex_point_z, z_shift, partition_data = data_extended(self.point_xy, self.point_z, detect_R = 15, 
                 smoothness_R = smoothness_R, 
                 smoothness_grid_pitch = smoothness_grid_pitch, 
-                reference_of_zero_correction_point = np.array([0., 10.]), 
+                reference_of_zero_correction_point = np.array([0., 0.]), 
                 boundary = "auto", 
                 extended_mode = extended_mode, 
-                partition_data = None)
+                partition_data = None, 
+                print_out = True)
         self.point_xy = np.row_stack([self.point_xy, ex_point_xy])
         self.point_z = np.concatenate([self.point_z, ex_point_z]) - z_shift
 
         interpolation_data = smooth_calculator(self.point_xy, \
-            self.point_z, smoothness_R = smoothness_R, grid_pitch = smoothness_grid_pitch, partition_data = None)
+            self.point_z, smoothness_R = smoothness_R, \
+            grid_pitch = smoothness_grid_pitch, partition_data = None, print_out = True)
         self.GL_objs.append(Point(self, np.column_stack([self.point_xy, self.point_z]), 3))
 
         self.plot_grid()

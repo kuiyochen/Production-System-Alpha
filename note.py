@@ -19,6 +19,8 @@ Just use _g_code_ generator in "calculate.py" with mold surface function and var
 
 from reader import *
 from calculate import *
+import numpy as np
+import pickle
 def Lens_Mold_transform_operator(func, grad_func, Hess_func):
     new_func = func
     new_grad_func = grad_func
@@ -29,6 +31,8 @@ def Lens_Mold_transform_operator(func, grad_func, Hess_func):
         new_Hess_func = lambda x, y: interpolation_Hess_func(x, y, new_func, epsilon = 10**-10, form = "stack_array")
     return new_func, new_grad_func, new_Hess_func
 
+
+# ---------------------- mold_correction_process start -------------------------
 
 source = "XX.csv"
 partition_data = None
@@ -78,44 +82,86 @@ extended_mode = {"xy_shape": "circle", # "normal to boundary"
 '''
 
 measurement_center_in_func_coordinate = np.array([0., 0.])
-UA3P_xy = UA3P_xy
-ex_point_xy = ex_point_xy
-UA3P_z = UA3P_z
-ex_point_z = ex_point_z
 pts = np.row_stack([UA3P_xy, ex_point_xy])
-z = np.concatenate([UA3P_z, ex_point_z])
+z = np.concatenate([UA3P_z, ex_point_z]) - z_shift
 interpolation_data = smooth_calculator(pts, z, smoothness_R, smoothness_grid_pitch, partition_data = None, print_out = False)
 correction_func = lambda x, y: interpolation_2D(x, y, interpolation_data)
 correction_func_grad = lambda x, y: interpolation_grad_func(x, y, correction_func, epsilon = 10**-10, form = "stack_array")
 
+
+# pitch = 0.2
+# degree_pitch = 5
+# max_radius = 1.5
+# assert 360 % degree_pitch == 0., ""
+# ths = np.arange(0, 360 * (1 + max_radius // pitch), degree_pitch) % 360
+# radiuses = np.linspace(0., max_radius, len(ths))[::-1]
+# temp = radiuses * np.exp(np.deg2rad(ths) * 1J)
+# contact_points_in_func_coordinate = np.column_stack([temp.real, temp.imag])
+# print(contact_points_in_func_coordinate)
+# ths = np.arange(0, 360 * 4, degree_pitch) % 360
+# temp = max_radius * np.exp(np.deg2rad(ths) * 1J)
+# lead_in_process_contact_points_in_func_coordinate = np.column_stack([temp.real, temp.imag])
+# print(lead_in_process_contact_points_in_func_coordinate)
+# func = lambda points: 0.5 * points[:, 0]**2 + 0.01 * points[:, 1]**2
+# grad = lambda points: np.column_stack([0.5 * points[:, 0] * 2, 0.01 * points[:, 1] * 2])
+
+func = lambda x, y: last_time_func(x, y) - correction_func(x, y)
+grad = lambda x, y: last_time_func_grad(x, y) - correction_func_grad(x, y)
+ncp_name = "test_path.ncp", \
+init_func_center_in_machine_coordinate = np.zeros(2), \
+gradient_of_origin_in_machine_coordinate = np.zeros(2), \
+func_center_height_in_machine_coordinate = 0., \
+tool_R = 0.05, \
+lathe_tilt = 0., \
+lathe_fix_swing = 0., \
+lead_out_process_angles_in_func_coordinate = np.arange(0, 360 * 4, 1.) % 360, \
+lead_out_left = 0.15, \
+lead_in_process_contact_points_in_func_coordinate = lead_in_process_contact_points_in_func_coordinate, \
+lead_in_left = 0.05, \
+B_axis = "OFF", \
+B_bound = 80., \
+B_mitigate_rate_bound = 0.9, \
+B_scale_mitigate_rate = 1.5, \
+lathe_C = "OFF", \
+lathe_C_mitigate_rate = 2.0, \
+Counterclockwise = False, \
+F_axis = "OFF", \
+F_max = 9000, \
+F_min = 10, \
+F_mitigate_rate = 0.8
+
+with open('last_time_contact_points.pkl', 'rb') as f:
+    contact_points, lead_in_process_contact_points_in_func_coordinate = pickle.load(f)
+
 contact_points, lead_in_process_contact_points_in_func_coordinate = \
 get_gcode(contact_points_in_func_coordinate, \
-    func, \
-    grad, \
-    ncp_name = "test_path.ncp", \
-    init_func_center_in_machine_coordinate = np.zeros(2), \
-    # init_func_x_axis_angle_in_machine_coordinate = 0., \
-    gradient_of_origin_in_machine_coordinate = np.zeros(2), \
-    func_center_height_in_machine_coordinate = 0., \
-    tool_R = 0.05, \
-    lathe_tilt = 0., \
-    lathe_fix_swing = 0., \
-    lead_out_process_angles_in_func_coordinate = np.arange(0, 360 * 4, 1.) % 360, \
-    lead_out_left = 0.15, \
-    lead_in_process_contact_points_in_func_coordinate = None, \
-    lead_in_left = 0.05, \
-    B_axis = "OFF", \
-    B_bound = 80., \
-    B_mitigate_rate_bound = 0.9, \
-    B_scale_mitigate_rate = 1.5, \
-    lathe_C = "OFF", \
-    lathe_C_mitigate_rate = 2.0, \
-    Counterclockwise = False, \
-    F_axis = "OFF", \
-    F_max = 9000, \
-    F_min = 10, \
-    F_mitigate_rate = 0.8
+    func = func, \
+    grad = grad, \
+    ncp_name = ncp_name, \
+    init_func_center_in_machine_coordinate = init_func_center_in_machine_coordinate, \
+    gradient_of_origin_in_machine_coordinate = gradient_of_origin_in_machine_coordinate, \
+    func_center_height_in_machine_coordinate = func_center_height_in_machine_coordinate, \
+    tool_R = tool_R, \
+    lathe_tilt = lathe_tilt, \
+    lathe_fix_swing = lathe_fix_swing, \
+    lead_out_process_angles_in_func_coordinate = lead_out_process_angles_in_func_coordinate, \
+    lead_out_left = lead_out_left, \
+    lead_in_process_contact_points_in_func_coordinate = lead_in_process_contact_points_in_func_coordinate, \
+    lead_in_left = lead_in_left, \
+    B_axis = B_axis, \
+    B_bound = B_bound, \
+    B_mitigate_rate_bound = B_mitigate_rate_bound, \
+    B_scale_mitigate_rate = B_scale_mitigate_rate, \
+    lathe_C = lathe_C, \
+    lathe_C_mitigate_rate = lathe_C_mitigate_rate, \
+    Counterclockwise = Counterclockwise, \
+    F_axis = F_axis, \
+    F_max = F_max, \
+    F_min = F_min, \
+    F_mitigate_rate = F_mitigate_rate
     )
 
+with open("contact_points.pkl", 'wb') as f:
+    pickle.dump([contact_points, lead_in_process_contact_points_in_func_coordinate], f)
 
-
+# ---------------------- mold_correction_process end -------------------------
